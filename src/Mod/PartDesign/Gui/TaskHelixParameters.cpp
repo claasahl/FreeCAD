@@ -21,36 +21,22 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 
-#ifndef _PreComp_
-#endif
-
-#include <Base/UnitsApi.h>
-#include <Base/Console.h>
-#include <App/Application.h>
 #include <App/Document.h>
+#include <App/DocumentObject.h>
 #include <App/Origin.h>
-#include <App/OriginFeature.h>
+#include <Base/Console.h>
 #include <Gui/Application.h>
+#include <Gui/CommandT.h>
 #include <Gui/Document.h>
-#include <Gui/BitmapFactory.h>
-#include <Gui/ViewProvider.h>
-#include <Gui/WaitCursor.h>
 #include <Gui/Selection.h>
-#include <Gui/Command.h>
+#include <Gui/WaitCursor.h>
 #include <Gui/ViewProviderOrigin.h>
-#include <Mod/PartDesign/App/DatumLine.h>
-#include <Mod/PartDesign/App/FeatureHelix.h>
-#include <Mod/PartDesign/App/FeatureGroove.h>
-#include <Mod/Sketcher/App/SketchObject.h>
 #include <Mod/PartDesign/App/Body.h>
-#include <QString>
+#include <Mod/PartDesign/App/FeatureHelix.h>
 
 #include "ReferenceSelection.h"
-#include "Utils.h"
-
 #include "ui_TaskHelixParameters.h"
 #include "TaskHelixParameters.h"
 
@@ -148,28 +134,28 @@ void TaskHelixParameters::connectSlots()
 {
     QMetaObject::connectSlotsByName(this);
 
-    connect(ui->pitch, SIGNAL(valueChanged(double)),
-        this, SLOT(onPitchChanged(double)));
-    connect(ui->height, SIGNAL(valueChanged(double)),
-        this, SLOT(onHeightChanged(double)));
-    connect(ui->turns, SIGNAL(valueChanged(double)),
-        this, SLOT(onTurnsChanged(double)));
-    connect(ui->coneAngle, SIGNAL(valueChanged(double)),
-        this, SLOT(onAngleChanged(double)));
-    connect(ui->growth, SIGNAL(valueChanged(double)),
-        this, SLOT(onGrowthChanged(double)));
-    connect(ui->axis, SIGNAL(activated(int)),
-        this, SLOT(onAxisChanged(int)));
-    connect(ui->checkBoxLeftHanded, SIGNAL(toggled(bool)),
-        this, SLOT(onLeftHandedChanged(bool)));
-    connect(ui->checkBoxReversed, SIGNAL(toggled(bool)),
-        this, SLOT(onReversedChanged(bool)));
-    connect(ui->checkBoxUpdateView, SIGNAL(toggled(bool)),
-        this, SLOT(onUpdateView(bool)));
-    connect(ui->inputMode, SIGNAL(activated(int)),
-        this, SLOT(onModeChanged(int)));
-    connect(ui->checkBoxOutside, SIGNAL(toggled(bool)),
-        this, SLOT(onOutsideChanged(bool)));
+    connect(ui->pitch, qOverload<double>(&QuantitySpinBox::valueChanged), this,
+            &TaskHelixParameters::onPitchChanged);
+    connect(ui->height, qOverload<double>(&QuantitySpinBox::valueChanged), this,
+            &TaskHelixParameters::onHeightChanged);
+    connect(ui->turns, qOverload<double>(&QuantitySpinBox::valueChanged), this,
+            &TaskHelixParameters::onTurnsChanged);
+    connect(ui->coneAngle, qOverload<double>(&QuantitySpinBox::valueChanged), this,
+            &TaskHelixParameters::onAngleChanged);
+    connect(ui->growth, qOverload<double>(&QuantitySpinBox::valueChanged), this,
+            &TaskHelixParameters::onGrowthChanged);
+    connect(ui->axis, qOverload<int>(&QComboBox::activated), this,
+            &TaskHelixParameters::onAxisChanged);
+    connect(ui->checkBoxLeftHanded, &QCheckBox::toggled, this,
+            &TaskHelixParameters::onLeftHandedChanged);
+    connect(ui->checkBoxReversed, &QCheckBox::toggled, this,
+            &TaskHelixParameters::onReversedChanged);
+    connect(ui->checkBoxUpdateView, &QCheckBox::toggled, this,
+        &TaskHelixParameters::onUpdateView);
+    connect(ui->inputMode, qOverload<int>(&QComboBox::activated), this,
+            &TaskHelixParameters::onModeChanged);
+    connect(ui->checkBoxOutside, &QCheckBox::toggled, this,
+            &TaskHelixParameters::onOutsideChanged);
 }
 
 void TaskHelixParameters::showCoordinateAxes()
@@ -208,7 +194,7 @@ void TaskHelixParameters::fillAxisCombo(bool forceRefill)
         addPartAxes();
 
         //add "Select reference"
-        addAxisToCombo(0, std::string(), tr("Select reference..."));
+        addAxisToCombo(nullptr, std::string(), tr("Select reference..."));
     }
 
     //add current link, if not in list and highlight it
@@ -289,21 +275,29 @@ void TaskHelixParameters::updateStatus()
 {
     auto pcHelix = static_cast<PartDesign::Helix*>(vp->getObject());
     auto status = std::string(pcHelix->getStatusString());
+    QString translatedStatus;
     if (status.compare("Valid") == 0 || status.compare("Touched") == 0) {
-        if (pcHelix->safePitch() > pcHelix->Pitch.getValue())
-            status = "Warning: helix might be self intersecting";
-        else
-            status = "";
+        if (pcHelix->safePitch() > pcHelix->Pitch.getValue()) {
+            translatedStatus = tr("Warning: helix might be self intersecting");
+        }
     }
-    ui->labelMessage->setText(QString::fromUtf8(status.c_str()));
+    // if the helix touches itself along a single helical edge we get this error
+    else if (status.compare("NCollection_IndexedDataMap::FindFromKey") == 0) {
+        translatedStatus = tr("Error: helix touches itself");
+    }
+    ui->labelMessage->setText(translatedStatus);
 }
 
 void TaskHelixParameters::updateUI()
 {
     fillAxisCombo();
-
+    assignToolTipsFromPropertyDocs();
     updateStatus();
+    adaptVisibilityToMode();
+}
 
+void TaskHelixParameters::adaptVisibilityToMode()
+{
     bool isPitchVisible = false;
     bool isHeightVisible = false;
     bool isTurnsVisible = false;
@@ -356,6 +350,52 @@ void TaskHelixParameters::updateUI()
     ui->labelGrowth->setVisible(isGrowthVisible);
 
     ui->checkBoxOutside->setVisible(isOutsideVisible);
+}
+
+void TaskHelixParameters::assignToolTipsFromPropertyDocs()
+{
+    auto pcHelix = static_cast<PartDesign::Helix*>(vp->getObject());
+    const char* propCategory = "App::Property"; // cf. https://tracker.freecad.org/view.php?id=0002524
+    QString toolTip;
+
+    // Beware that "Axis" in the GUI actually represents the property "ReferenceAxis"!
+    // The property "Axis" holds only the directional part of the reference axis and has no corresponding GUI element.
+    toolTip = QApplication::translate(propCategory, pcHelix->ReferenceAxis.getDocumentation());
+    ui->axis->setToolTip(toolTip);
+    ui->labelAxis->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Mode.getDocumentation());
+    ui->inputMode->setToolTip(toolTip);
+    ui->labelInputMode->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Pitch.getDocumentation());
+    ui->pitch->setToolTip(toolTip);
+    ui->labelPitch->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Height.getDocumentation());
+    ui->height->setToolTip(toolTip);
+    ui->labelHeight->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Turns.getDocumentation());
+    ui->turns->setToolTip(toolTip);
+    ui->labelTurns->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Angle.getDocumentation());
+    ui->coneAngle->setToolTip(toolTip);
+    ui->labelConeAngle->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Growth.getDocumentation());
+    ui->growth->setToolTip(toolTip);
+    ui->labelGrowth->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->LeftHanded.getDocumentation());
+    ui->checkBoxLeftHanded->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Reversed.getDocumentation());
+    ui->checkBoxReversed->setToolTip(toolTip);
+
+    toolTip = QApplication::translate(propCategory, pcHelix->Outside.getDocumentation());
+    ui->checkBoxOutside->setToolTip(toolTip);
 }
 
 void TaskHelixParameters::onSelectionChanged(const Gui::SelectionChanges& msg)
@@ -421,8 +461,12 @@ void TaskHelixParameters::onAxisChanged(int num)
         oldRefName = oldSubRefAxis.front();
 
     App::PropertyLinkSub& lnk = *(axesInList[num]);
-    if (lnk.getValue() == 0) {
+    if (!lnk.getValue()) {
         // enter reference selection mode
+        // assure the sketch is visible
+        if (auto sketch = dynamic_cast<Part::Part2DObject *>(pcHelix->Profile.getValue())) {
+            Gui::cmdAppObjectShow(sketch);
+        }
         TaskSketchBasedParameters::onSelectReference(
             AllowSelection::EDGE |
             AllowSelection::PLANAR |
@@ -507,7 +551,7 @@ TaskHelixParameters::~TaskHelixParameters()
 {
     try {
         //hide the parts coordinate system axis for selection
-        PartDesign::Body* body = vp ? PartDesign::Body::findBodyOf(vp->getObject()) : 0;
+        PartDesign::Body* body = vp ? PartDesign::Body::findBodyOf(vp->getObject()) : nullptr;
         if (body) {
             App::Origin* origin = body->getOrigin();
             ViewProviderOrigin* vpOrigin;
@@ -529,6 +573,7 @@ void TaskHelixParameters::changeEvent(QEvent* e)
         int axis = ui->axis->currentIndex();
         int mode = ui->inputMode->currentIndex();
         ui->retranslateUi(proxy);
+        assignToolTipsFromPropertyDocs();
 
         // Axes added by the user cannot be restored
         fillAxisCombo(true);
@@ -547,7 +592,7 @@ void TaskHelixParameters::getReferenceAxis(App::DocumentObject*& obj, std::vecto
 
     int num = ui->axis->currentIndex();
     const App::PropertyLinkSub& lnk = *(axesInList.at(num));
-    if (lnk.getValue() == 0) {
+    if (!lnk.getValue()) {
         throw Base::RuntimeError("Still in reference selection mode; reference wasn't selected yet");
     }
     else {

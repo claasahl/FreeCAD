@@ -20,14 +20,10 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 
 #ifndef _PreComp_
-# include <qapplication.h>
-# include <qevent.h>
-# include <qpainter.h>
-# include <qpixmap.h>
+# include <QPixmap>
 # include <QMenu>
 # include <Inventor/SbBox.h>
 # include <Inventor/events/SoEvent.h>
@@ -36,16 +32,13 @@
 # include <Inventor/events/SoMouseButtonEvent.h>
 #endif
 
-#include <QtOpenGL.h>
-#include <Base/Console.h>
-
 #include "MouseSelection.h"
-#include "View3DInventor.h"
 #include "View3DInventorViewer.h"
+
 
 using namespace Gui;
 
-AbstractMouseSelection::AbstractMouseSelection() : _pcView3D(0)
+AbstractMouseSelection::AbstractMouseSelection()
 {
     m_iXold = 0;
     m_iYold = 0;
@@ -70,7 +63,7 @@ void AbstractMouseSelection::releaseMouseModel(bool abort)
         terminate(abort);
 
         _pcView3D->getWidget()->setCursor(m_cPrevCursor);
-        _pcView3D = 0;
+        _pcView3D = nullptr;
     }
 }
 
@@ -93,7 +86,7 @@ int AbstractMouseSelection::handleEvent(const SoEvent* const ev, const SbViewpor
     y = h-y; // the origin is at the left bottom corner (instead of left top corner)
 
     if (ev->getTypeId().isDerivedFrom(SoMouseButtonEvent::getClassTypeId())) {
-        const SoMouseButtonEvent* const event = (const SoMouseButtonEvent*) ev;
+        const auto event = (const SoMouseButtonEvent*) ev;
         const SbBool press = event->getState() == SoButtonEvent::DOWN ? true : false;
 
         if (press) {
@@ -124,87 +117,6 @@ BaseMouseSelection::BaseMouseSelection()
 {
 }
 
-// -----------------------------------------------------------------------------------
-#if 0
-/* XPM */
-static const char* cursor_polypick[]= {
-    "32 32 2 1",
-    "# c #646464",
-    ". c None",
-    "................................",
-    "................................",
-    ".......#........................",
-    ".......#........................",
-    ".......#........................",
-    "................................",
-    ".......#........................",
-    "..###.###.###...................",
-    ".......#...............#........",
-    "......................##........",
-    ".......#..............#.#.......",
-    ".......#.............#..#.......",
-    ".......#............#...#.......",
-    "....................#....#......",
-    "...................#.....#......",
-    "..................#......#......",
-    "............#.....#.......#.....",
-    "...........#.##..#........#.....",
-    "..........#....##.........#.....",
-    ".........#...............#......",
-    "........#................#......",
-    ".......#................#.......",
-    "......#.................#.......",
-    ".....#.................#........",
-    "....#####..............#........",
-    ".........#########....#.........",
-    "..................#####.........",
-    "................................",
-    "................................",
-    "................................",
-    "................................",
-    "................................"
-};
-
-/* XPM */
-static const char* cursor_scissors[]= {
-    "32 32 3 1",
-    "# c #000000",
-    "+ c #ffffff",
-    ". c None",
-    "....+...........................",
-    "....+...........................",
-    "....+...........................",
-    "................................",
-    "+++.+.+++.......................",
-    "................................",
-    "....+...........................",
-    "....+...................#####...",
-    "....+.................########..",
-    ".....................#########..",
-    ".....###............##########..",
-    "....##++##.........#####...###..",
-    "...#++++++##.......####...####..",
-    "...##+++++++#......####.######..",
-    ".....#+++++++##....##########...",
-    "......##+++++++##.##########....",
-    "........##+++++++#########......",
-    "..........#+++++++#####.........",
-    "...........##+++++####..........",
-    "...........##+++++###...........",
-    ".........##+++++++########......",
-    "........##+++++++###########....",
-    "......##+++++++##.###########...",
-    "....##+++++++##....##########...",
-    "...#+++++++##......####..#####..",
-    "...#++++++#........#####..####..",
-    "....##++##..........#####..###..",
-    "......#.............##########..",
-    ".....................#########..",
-    ".......................######...",
-    "................................",
-    "................................"
-};
-#endif
 static const char* cursor_cut_scissors[]= {
     "32 32 6 1",
     "a c #800000",
@@ -292,9 +204,7 @@ void PolyPickerSelection::draw()
     _pcView3D->redraw();
 }
 
-PolyPickerSelection::~PolyPickerSelection()
-{
-}
+PolyPickerSelection::~PolyPickerSelection() = default;
 
 int PolyPickerSelection::popupMenu()
 {
@@ -445,9 +355,7 @@ PolyClipSelection::PolyClipSelection()
     selectionBits.set(2);
 }
 
-PolyClipSelection::~PolyClipSelection()
-{
-}
+PolyClipSelection::~PolyClipSelection() = default;
 
 int PolyClipSelection::popupMenu()
 {
@@ -492,14 +400,9 @@ int PolyClipSelection::popupMenu()
 
 // -----------------------------------------------------------------------------------
 
-FreehandSelection::FreehandSelection()
-{
-}
+FreehandSelection::FreehandSelection() = default;
 
-FreehandSelection::~FreehandSelection()
-{
-
-}
+FreehandSelection::~FreehandSelection() = default;
 
 void FreehandSelection::setClosed(bool on)
 {
@@ -653,9 +556,7 @@ RubberbandSelection::RubberbandSelection()
     rubberband.setColor(1.0, 1.0, 0.0, 0.5);
 }
 
-RubberbandSelection::~RubberbandSelection()
-{
-}
+RubberbandSelection::~RubberbandSelection() = default;
 
 void RubberbandSelection::setColor(float r, float g, float b, float a)
 {
@@ -753,19 +654,13 @@ RectangleSelection::RectangleSelection() : RubberbandSelection()
     rubberband.setColor(0.0,0.0,1.0,1.0);
 }
 
-RectangleSelection::~RectangleSelection()
-{
-}
+RectangleSelection::~RectangleSelection() = default;
 
 // -----------------------------------------------------------------------------------
 
-BoxZoomSelection::BoxZoomSelection()
-{
-}
+BoxZoomSelection::BoxZoomSelection() = default;
 
-BoxZoomSelection::~BoxZoomSelection()
-{
-}
+BoxZoomSelection::~BoxZoomSelection() = default;
 
 void BoxZoomSelection::terminate(bool abort)
 {

@@ -20,40 +20,33 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
-#ifndef _PreComp_
-# include <Python.h>
-#endif
 
 #include <Base/Console.h>
-#include <Base/PyObjectBase.h>
 #include <Base/Interpreter.h>
-#include <CXX/Extensions.hxx>
-#include <CXX/Objects.hxx>
+#include <Base/PyObjectBase.h>
 
-#include "StartConfiguration.h"
 
-namespace Start {
-class Module : public Py::ExtensionModule<Module>
+namespace Start
+{
+class Module: public Py::ExtensionModule<Module>
 {
 public:
-    Module() : Py::ExtensionModule<Module>("Start")
+    Module()
+        : Py::ExtensionModule<Module>("Start")
     {
-        initialize("This module is the Start module."); // register with Python
+        initialize("This module is the Start module.");  // register with Python
     }
-
-    virtual ~Module() {}
 
 private:
 };
 
 PyObject* initModule()
 {
-    return (new Module)->module().ptr();
+    return Base::Interpreter().addModule(new Module);
 }
 
-} // namespace Start
+}  // namespace Start
 
 /* Python entry */
 PyMOD_INIT_FUNC(Start)

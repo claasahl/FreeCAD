@@ -23,18 +23,15 @@
 
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <Precision.hxx>
-# include <GProp_GProps.hxx>
 # include <BRepGProp.hxx>
+# include <GProp_GProps.hxx>
+# include <Precision.hxx>
 #endif
 
 #include "FeatureMultiTransform.h"
-#include "FeatureScaled.h"
 #include "FeatureAddSub.h"
-#include <Mod/Part/App/TopoShape.h>
+#include "FeatureScaled.h"
 
-#include <Base/Console.h>
-#include <Base/Exception.h>
 
 using namespace PartDesign;
 
@@ -45,19 +42,18 @@ PROPERTY_SOURCE(PartDesign::MultiTransform, PartDesign::Transformed)
 
 MultiTransform::MultiTransform()
 {
-    ADD_PROPERTY(Transformations,(0));
+    ADD_PROPERTY(Transformations,(nullptr));
     Transformations.setSize(0);
 }
 
-void MultiTransform::positionBySupport(void)
+void MultiTransform::positionBySupport()
 {
     PartDesign::Transformed::positionBySupport();
     std::vector<App::DocumentObject*> transFeatures = Transformations.getValues();
-    for (std::vector<App::DocumentObject*>::const_iterator f = transFeatures.begin();
-         f != transFeatures.end(); ++f) {
-        if (!((*f)->getTypeId().isDerivedFrom(PartDesign::Transformed::getClassTypeId())))
+    for (auto f : transFeatures) {
+        if (!(f->getTypeId().isDerivedFrom(PartDesign::Transformed::getClassTypeId())))
             throw Base::TypeError("Transformation features must be subclasses of Transformed");
-        PartDesign::Transformed* transFeature = static_cast<PartDesign::Transformed*>(*f);
+        PartDesign::Transformed* transFeature = static_cast<PartDesign::Transformed*>(f);
         transFeature->Placement.setValue(this->Placement.getValue());
 
         // To avoid that a linked transform feature stays touched after a recompute

@@ -20,16 +20,12 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #ifndef GUI_TASKVIEW_TaskPadParameters_H
 #define GUI_TASKVIEW_TaskPadParameters_H
 
-#include <Gui/TaskView/TaskView.h>
-#include <Gui/Selection.h>
-#include <Gui/TaskView/TaskDialog.h>
-
 #include "TaskExtrudeParameters.h"
 #include "ViewProviderPad.h"
+
 
 namespace App {
 class Property;
@@ -46,19 +42,11 @@ class TaskPadParameters : public TaskExtrudeParameters
 {
     Q_OBJECT
 
-    enum class Modes {
-        Dimension,
-        ToLast,
-        ToFirst,
-        ToFace,
-        TwoDimensions
-    };
-
 public:
-    TaskPadParameters(ViewProviderPad *PadView, QWidget *parent = 0, bool newObj=false);
-    ~TaskPadParameters();
+    explicit TaskPadParameters(ViewProviderPad *PadView, QWidget *parent = nullptr, bool newObj=false);
+    ~TaskPadParameters() override;
 
-    virtual void apply() override;
+    void apply() override;
 
 private:
     void onModeChanged(int index) override;
@@ -72,7 +60,7 @@ class TaskDlgPadParameters : public TaskDlgSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskDlgPadParameters(ViewProviderPad *PadView, bool newObj=false);
+    explicit TaskDlgPadParameters(ViewProviderPad *PadView, bool newObj=false);
 
     ViewProviderPad* getPadView() const
     { return static_cast<ViewProviderPad*>(vp); }

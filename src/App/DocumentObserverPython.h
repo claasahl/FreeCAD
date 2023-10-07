@@ -24,15 +24,19 @@
 #ifndef APP_DOCUMENTOBSERVERPYTHON_H
 #define APP_DOCUMENTOBSERVERPYTHON_H
 
+#include <FCGlobal.h>
+#include <boost/signals2.hpp>
 #include <CXX/Objects.hxx>
-
-#include <boost_signals2.hpp>
-#include <boost/bind/bind.hpp>
 #include <string>
-
+#include <vector>
 
 namespace App
 {
+
+class Document;
+class DocumentObject;
+class ExtensionContainer;
+class Property;
 
 /**
  * The DocumentObserverPython class is used to notify registered Python instances
@@ -117,13 +121,13 @@ private:
     Py::Object inst;
     static std::vector<DocumentObserverPython*> _instances;
 
-    typedef struct PythonObject {
+    using Connection = struct PythonObject {
        boost::signals2::scoped_connection slot;
        Py::Object py;
        PyObject* ptr() {
            return py.ptr();
        }
-    } Connection;
+    };
 
     Connection pyCreatedDocument;
     Connection pyDeletedDocument;

@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>355</width>
+    <width>438</width>
     <height>561</height>
    </rect>
   </property>
@@ -534,6 +534,10 @@ Only available for holes without thread</string>
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>For countersinks this is the depth of
+the screw's top below the surface</string>
      </property>
      <property name="keyboardTracking">
       <bool>false</bool>

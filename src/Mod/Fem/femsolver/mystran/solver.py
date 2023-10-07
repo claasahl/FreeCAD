@@ -23,7 +23,7 @@
 
 __title__ = "FreeCAD FEM solver object Mystran"
 __author__ = "Bernd Hahnebach"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 ## @package SolverMystran
 #  \ingroup FEM
@@ -89,7 +89,8 @@ class Proxy(solverbase.Proxy):
 
 
 class ViewProxy(solverbase.ViewProxy):
-    pass
 
+    def getIcon(self):
+        return ":/icons/FEM_SolverMystran.svg"
 
 ##  @}

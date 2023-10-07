@@ -23,40 +23,22 @@
 
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <BRep_Builder.hxx>
-# include <BRep_Tool.hxx>
-# include <BRepAlgoAPI_Common.hxx>
 # include <BRepAlgoAPI_Fuse.hxx>
-# include <BRepAdaptor_Surface.hxx>
-# include <BRepBndLib.hxx>
-# include <BRepBuilderAPI_MakeFace.hxx>
-# include <BRepFeat_MakePrism.hxx>
-# include <BRepLProp_SLProps.hxx>
-# include <BRepPrimAPI_MakeHalfSpace.hxx>
-# include <Geom_Surface.hxx>
-# include <GeomAPI_ProjectPointOnSurf.hxx>
-# include <GeomLib_IsPlanarSurface.hxx>
-# include <gp_Pln.hxx>
 # include <Precision.hxx>
-# include <TopoDS.hxx>
-# include <TopoDS_Compound.hxx>
-# include <TopoDS_Face.hxx>
-# include <TopoDS_Solid.hxx>
-# include <TopoDS_Wire.hxx>
 # include <TopExp_Explorer.hxx>
+# include <TopoDS.hxx>
+# include <TopoDS_Face.hxx>
 #endif
 
-#include <App/Document.h>
+#include <App/DocumentObject.h>
 #include <Base/Console.h>
 #include <Base/Exception.h>
-#include <Base/Placement.h>
-#include <Base/Reader.h>
 
 #include "FeaturePad.h"
 
 using namespace PartDesign;
 
-const char* Pad::TypeEnums[]= {"Length", "UpToLast", "UpToFirst", "UpToFace", "TwoLengths", NULL};
+const char* Pad::TypeEnums[]= {"Length", "UpToLast", "UpToFirst", "UpToFace", "TwoLengths", nullptr};
 
 PROPERTY_SOURCE(PartDesign::Pad, PartDesign::FeatureExtrude)
 
@@ -66,31 +48,29 @@ Pad::Pad()
 
     ADD_PROPERTY_TYPE(Type, (0L), "Pad", App::Prop_None, "Pad type");
     Type.setEnums(TypeEnums);
-    ADD_PROPERTY_TYPE(Length, (100.0), "Pad", App::Prop_None,"Pad length");
-    ADD_PROPERTY_TYPE(Length2, (100.0), "Pad", App::Prop_None,"Second Pad length");
+    ADD_PROPERTY_TYPE(Length, (10.0), "Pad", App::Prop_None, "Pad length");
+    ADD_PROPERTY_TYPE(Length2, (10.0), "Pad", App::Prop_None, "Pad length in 2nd direction");
     ADD_PROPERTY_TYPE(UseCustomVector, (false), "Pad", App::Prop_None, "Use custom vector for pad direction");
     ADD_PROPERTY_TYPE(Direction, (Base::Vector3d(1.0, 1.0, 1.0)), "Pad", App::Prop_None, "Pad direction vector");
-    ADD_PROPERTY_TYPE(ReferenceAxis, (0), "Pad", App::Prop_None, "Reference axis of direction");
+    ADD_PROPERTY_TYPE(ReferenceAxis, (nullptr), "Pad", App::Prop_None, "Reference axis of direction");
     ADD_PROPERTY_TYPE(AlongSketchNormal, (true), "Pad", App::Prop_None, "Measure pad length along the sketch normal direction");
-    ADD_PROPERTY_TYPE(UpToFace, (0), "Pad", App::Prop_None, "Face where pad will end");
+    ADD_PROPERTY_TYPE(UpToFace, (nullptr), "Pad", App::Prop_None, "Face where pad will end");
     ADD_PROPERTY_TYPE(Offset, (0.0), "Pad", App::Prop_None, "Offset from face in which pad will end");
-    static const App::PropertyQuantityConstraint::Constraints signedLengthConstraint = {-DBL_MAX, DBL_MAX, 1.0};
     Offset.setConstraints(&signedLengthConstraint);
+    ADD_PROPERTY_TYPE(TaperAngle, (0.0), "Pad", App::Prop_None, "Taper angle");
+    TaperAngle.setConstraints(&floatAngle);
+    ADD_PROPERTY_TYPE(TaperAngle2, (0.0), "Pad", App::Prop_None, "Taper angle for 2nd direction");
+    TaperAngle2.setConstraints(&floatAngle);
 
     // Remove the constraints and keep the type to allow to accept negative values
-    // https://forum.freecadweb.org/viewtopic.php?f=3&t=52075&p=448410#p447636
+    // https://forum.freecad.org/viewtopic.php?f=3&t=52075&p=448410#p447636
     Length2.setConstraints(nullptr);
 }
 
 App::DocumentObjectExecReturn *Pad::execute()
 {
-    // Validate parameters
     double L = Length.getValue();
-    if ((std::string(Type.getValueAsString()) == "Length") && (L < Precision::Confusion()))
-        return new App::DocumentObjectExecReturn("Length of pad too small");
     double L2 = Length2.getValue();
-    if ((std::string(Type.getValueAsString()) == "TwoLengths") && (L < Precision::Confusion()))
-        return new App::DocumentObjectExecReturn("Second length of pad too small");
 
     // if midplane is true, disable reversed and vice versa
     bool hasMidplane = Midplane.getValue();
@@ -98,10 +78,8 @@ App::DocumentObjectExecReturn *Pad::execute()
     Midplane.setReadOnly(hasReversed);
     Reversed.setReadOnly(hasMidplane);
 
-    Part::Feature* obj = 0;
     TopoDS_Shape sketchshape;
     try {
-        obj = getVerifiedObject();
         sketchshape = getVerifiedFace();
     }
     catch (const Base::Exception& e) {
@@ -144,7 +122,7 @@ App::DocumentObjectExecReturn *Pad::execute()
 
         // factor would be zero if vectors are orthogonal
         if (factor < Precision::Confusion())
-            return new App::DocumentObjectExecReturn("Pad: Creation failed because direction is orthogonal to sketch's normal vector");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Pad: Creation failed because direction is orthogonal to sketch's normal vector"));
 
         // perform the length correction if not along custom vector
         if (AlongSketchNormal.getValue()) {
@@ -155,7 +133,7 @@ App::DocumentObjectExecReturn *Pad::execute()
         dir.Transform(invObjLoc.Transformation());
 
         if (sketchshape.IsNull())
-            return new App::DocumentObjectExecReturn("Pad: Creating a face from sketch failed");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Pad: Creating a face from sketch failed"));
         sketchshape.Move(invObjLoc);
 
         TopoDS_Shape prism;
@@ -171,10 +149,10 @@ App::DocumentObjectExecReturn *Pad::execute()
             // Find a valid face or datum plane to extrude up to
             TopoDS_Face upToFace;
             if (method == "UpToFace") {
-                getUpToFaceFromLinkSub(upToFace, UpToFace);
+                getFaceFromLinkSub(upToFace, UpToFace);
                 upToFace.Move(invObjLoc);
             }
-            getUpToFace(upToFace, base, supportface, sketchshape, method, dir);
+            getUpToFace(upToFace, base, sketchshape, method, dir);
             addOffsetToFace(upToFace, dir, Offset.getValue());
 
             // TODO: Write our own PrismMaker which does not depend on a solid base shape
@@ -208,12 +186,18 @@ App::DocumentObjectExecReturn *Pad::execute()
             }
         }
         else {
-            generatePrism(prism, sketchshape, method, dir, L, L2,
-                hasMidplane, hasReversed);
+            if (hasTaperedAngle()) {
+                if (hasReversed)
+                    dir.Reverse();
+                generateTaperedPrism(prism, sketchshape, method, dir, L, L2, TaperAngle.getValue(), TaperAngle2.getValue(), hasMidplane);
+            }
+            else {
+                generatePrism(prism, sketchshape, method, dir, L, L2, hasMidplane, hasReversed);
+            }
         }
 
         if (prism.IsNull())
-            return new App::DocumentObjectExecReturn("Pad: Resulting shape is empty");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Pad: Resulting shape is empty"));
 
         // set the additive shape property for later usage in e.g. pattern
         prism = refineShapeIfActive(prism);
@@ -224,17 +208,17 @@ App::DocumentObjectExecReturn *Pad::execute()
             BRepAlgoAPI_Fuse mkFuse(base, prism);
             // Let's check if the fusion has been successful
             if (!mkFuse.IsDone())
-                return new App::DocumentObjectExecReturn("Pad: Fusion with base feature failed");
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Pad: Fusion with base feature failed"));
             TopoDS_Shape result = mkFuse.Shape();
             // we have to get the solids (fuse sometimes creates compounds)
             TopoDS_Shape solRes = this->getSolid(result);
             // lets check if the result is a solid
             if (solRes.IsNull())
-                return new App::DocumentObjectExecReturn("Pad: Resulting shape is not a solid");
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Resulting shape is not a solid"));
 
             int solidCount = countSolids(result);
             if (solidCount > 1) {
-                return new App::DocumentObjectExecReturn("Pad: Result has multiple solids. This is not supported at this time.");
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Result has multiple solids: that is not currently supported."));
             }
 
             solRes = refineShapeIfActive(solRes);
@@ -243,22 +227,26 @@ App::DocumentObjectExecReturn *Pad::execute()
         else {
             int solidCount = countSolids(prism);
             if (solidCount > 1) {
-                return new App::DocumentObjectExecReturn("Pad: Result has multiple solids. This is not supported at this time.");
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Result has multiple solids: that is not currently supported."));
             }
 
            this->Shape.setValue(getSolid(prism));
         }
 
+        // eventually disable some settings that are not valid for the current method
+        updateProperties(method);
+
         return App::DocumentObject::StdReturn;
     }
     catch (Standard_Failure& e) {
         if (std::string(e.GetMessageString()) == "TopoDS::Face")
-            return new App::DocumentObjectExecReturn("Could not create face from sketch.\n"
-                "Intersecting sketch entities or multiple faces in a sketch are not allowed.");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Could not create face from sketch.\n"
+                "Intersecting sketch entities or multiple faces in a sketch are not allowed."));
         else
             return new App::DocumentObjectExecReturn(e.GetMessageString());
     }
     catch (Base::Exception& e) {
         return new App::DocumentObjectExecReturn(e.what());
     }
+
 }

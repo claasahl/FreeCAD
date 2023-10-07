@@ -22,11 +22,6 @@
 # *                                                                         *
 # ***************************************************************************
 """Provides functions to return the SVG representation of some shapes.
-
-Warning: this still uses the `Drawing.projectToSVG` method to provide
-the SVG representation of certain objects.
-Therefore, even if the Drawing Workbench is obsolete, the `Drawing` module
-may not be removed completely yet. This must be checked.
 """
 ## @package svgshapes
 # \ingroup draftfunctions
@@ -39,13 +34,12 @@ import FreeCAD as App
 import DraftVecUtils
 import draftutils.utils as utils
 
-from draftutils.utils import param
 from draftutils.messages import _msg, _wrn
 
 # Delay import of module until first use because it is heavy
 Part = lz.LazyLoader("Part", globals(), "Part")
 DraftGeomUtils = lz.LazyLoader("DraftGeomUtils", globals(), "DraftGeomUtils")
-Drawing = lz.LazyLoader("Drawing", globals(), "Drawing")
+TechDraw = lz.LazyLoader("TechDraw", globals(), "TechDraw")
 
 ## \addtogroup draftfunctions
 # @{
@@ -95,6 +89,7 @@ def getProj(vec, plane=None):
 
 def get_discretized(edge, plane):
     """Get a discretized edge on a plane."""
+    param = App.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft")
     pieces = param.GetFloat("svgDiscretization", 10.0)
 
     if pieces == 0:
@@ -125,7 +120,7 @@ def getDiscretized(edge, plane):
     return get_discretized(edge, plane)
 
 
-def _get_path_circ_ellipse(plane, edge, vertex, edata,
+def _get_path_circ_ellipse(plane, edge, verts, edata,
                            iscircle, isellipse,
                            fill, stroke, linewidth, lstyle):
     """Get the edge data from a path that is a circle or ellipse."""
@@ -151,7 +146,7 @@ def _get_path_circ_ellipse(plane, edge, vertex, edata,
     done = False
     if int(occversion[0]) >= 7 and int(occversion[1]) >= 1:
         # if using occ >= 7.1, use HLR algorithm
-        snip = Drawing.projectToSVG(edge, drawing_plane_normal)
+        snip = TechDraw.projectToSVG(edge, drawing_plane_normal)
 
         if snip:
             try:
@@ -189,9 +184,9 @@ def _get_path_circ_ellipse(plane, edge, vertex, edata,
             # Difference in angles
             _diff = (center.LastParameter - center.FirstParameter)/2.0
             endpoints = [get_proj(center.value(_diff), plane),
-                         get_proj(vertex[-1].Point, plane)]
+                         get_proj(verts[-1].Point, plane)]
         else:
-            endpoints = [get_proj(vertex[-1].Point, plane)]
+            endpoints = [get_proj(verts[-1].Point, plane)]
 
         # Arc with more than one vertex
         if iscircle:
@@ -383,30 +378,33 @@ def get_path(obj, plane,
             wire.fixWire()
             egroups.append(Part.__sortEdges__(wire.Edges))
 
-    for _, _edges in enumerate(egroups):
+    for _edges in egroups:
         edata = ""
-        vertex = ()  # skipped for the first edge
 
         for edgeindex, edge in enumerate(_edges):
-            previousvs = vertex
-            # vertexes of an edge (reversed if needed)
-            vertex = edge.Vertexes
-            if previousvs:
-                if (vertex[0].Point - previousvs[-1].Point).Length > 1e-6:
-                    vertex.reverse()
-
             if edgeindex == 0:
-                v = get_proj(vertex[0].Point, plane)
+                verts = edge.Vertexes
+                if len(_edges) > 1:
+                    last_pt = verts[-1].Point
+                    nextverts = _edges[1].Vertexes
+                    if (last_pt - nextverts[0].Point).Length > 1e-6 \
+                            and (last_pt - nextverts[-1].Point).Length > 1e-6:
+                        verts.reverse()
+                v = get_proj(verts[0].Point, plane)
                 edata += 'M {} {} '.format(v.x, v.y)
             else:
-                if (vertex[0].Point - previousvs[-1].Point).Length > 1e-6:
-                    raise ValueError('edges not ordered')
+                previousverts = verts
+                verts = edge.Vertexes
+                if (verts[0].Point - previousverts[-1].Point).Length > 1e-6:
+                    verts.reverse()
+                    if (verts[0].Point - previousverts[-1].Point).Length > 1e-6:
+                        raise ValueError('edges not ordered')
 
             iscircle = DraftGeomUtils.geomType(edge) == "Circle"
             isellipse = DraftGeomUtils.geomType(edge) == "Ellipse"
 
             if iscircle or isellipse:
-                _type, data = _get_path_circ_ellipse(plane, edge, vertex,
+                _type, data = _get_path_circ_ellipse(plane, edge, verts,
                                                      edata,
                                                      iscircle, isellipse,
                                                      fill, stroke,
@@ -418,7 +416,7 @@ def get_path(obj, plane,
                 # else the `edata` was properly augmented, so re-assing it
                 edata = data
             elif DraftGeomUtils.geomType(edge) == "Line":
-                v = get_proj(vertex[-1].Point, plane)
+                v = get_proj(verts[-1].Point, plane)
                 edata += 'L {} {} '.format(v.x, v.y)
             else:
                 # If it's not a circle nor ellipse nor straight line

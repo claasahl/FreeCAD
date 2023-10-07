@@ -24,7 +24,7 @@
 
 __title__ = "FreeCAD FEM solver CalculiX tasks"
 __author__ = "Markus Hovorka, Bernd Hahnebach"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 ## \addtogroup FEM
 #  @{
@@ -115,7 +115,9 @@ class Solve(run.Solve):
         self.pushStatus("Get solver binary...\n")
         binary = settings.get_binary("Calculix")
         if binary is None:
-            self.fail()  # a print has been made in settings module
+            self.pushStatus("Error: The Calculix binary has not been found!")
+            self.fail()
+            return
 
         # run solver
         self._process = subprocess.Popen(

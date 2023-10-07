@@ -20,40 +20,34 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <Python.h>
-# include <TColgp_Array1OfPnt.hxx>
-# include <Geom_BSplineSurface.hxx>
+#include <Geom_BSplineSurface.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #endif
 
 #include <Base/Console.h>
 #include <Base/Converter.h>
-#include <Base/Interpreter.h>
-#include <Base/PyObjectBase.h>
 #include <Base/GeometryPyCXX.h>
-
-#include <CXX/Extensions.hxx>
-#include <CXX/Objects.hxx>
-
-#include <Mod/Part/App/BSplineSurfacePy.h>
-#include <Mod/Mesh/App/Mesh.h>
+#include <Base/Interpreter.h>
+#include <Base/PyWrapParseTupleAndKeywords.h>
 #include <Mod/Mesh/App/MeshPy.h>
+#include <Mod/Part/App/BSplineSurfacePy.h>
 #include <Mod/Points/App/PointsPy.h>
-
-#include "ApproxSurface.h"
-#include "BSplineFitting.h"
-#include "SurfaceTriangulation.h"
-#include "RegionGrowing.h"
-#include "Segmentation.h"
-#include "SampleConsensus.h"
 #if defined(HAVE_PCL_FILTERS)
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types.h>
 #endif
 
+#include "ApproxSurface.h"
+#include "BSplineFitting.h"
+#include "RegionGrowing.h"
+#include "SampleConsensus.h"
+#include "Segmentation.h"
+#include "SurfaceTriangulation.h"
+
+// clang-format off
 /*
 Dependency of pcl components:
 common: none
@@ -81,9 +75,24 @@ public:
     Module() : Py::ExtensionModule<Module>("ReverseEngineering")
     {
         add_keyword_method("approxSurface",&Module::approxSurface,
-            "approxSurface(Points=,UDegree=3,VDegree=3,NbUPoles=6,NbVPoles=6,Smooth=True,\n"
-            "Weight=0.1,Grad=1.0,Bend=0.0,\n"
-            "Iterations=5,Correction=True,PatchFactor=1.0)"
+            "approxSurface(Points, UDegree=3, VDegree=3, NbUPoles=6, NbVPoles=6,\n"
+            "Smooth=True, Weight=0.1, Grad=1.0, Bend=0.0, Curv=0.0\n"
+            "Iterations=5, Correction=True, PatchFactor=1.0, UVDirs=((ux, uy, uz), (vx, vy, vz)))\n\n"
+            "Points: the input data (e.g. a point cloud or mesh)\n"
+            "UDegree: the degree in u parametric direction\n"
+            "VDegree: the degree in v parametric direction\n"
+            "NbUPoles: the number of control points in u parametric direction\n"
+            "NbVPoles: the number of control points in v parametric direction\n"
+            "Smooth: use energy terms to create a smooth surface\n"
+            "Weight: weight of the energy terms altogether\n"
+            "Grad: weight of the gradient term\n"
+            "Bend: weight of the bending energy term\n"
+            "Curv: weight of the deviation of curvature term\n"
+            "Iterations: number of iterations\n"
+            "Correction: perform a parameter correction of each iteration step\n"
+            "PatchFactor: create an extended surface\n"
+            "UVDirs: set the u,v parameter directions as tuple of two vectors\n"
+            "        If not set then they will be determined by computing a best-fit plane\n"
         );
 #if defined(HAVE_PCL_SURFACE)
         add_keyword_method("triangulate",&Module::triangulate,
@@ -149,13 +158,11 @@ public:
         initialize("This module is the ReverseEngineering module."); // register with Python
     }
 
-    virtual ~Module() {}
-
 private:
     Py::Object approxSurface(const Py::Tuple& args, const Py::Dict& kwds)
     {
         PyObject *o;
-        PyObject *uvdirs = 0;
+        PyObject *uvdirs = nullptr;
         // spline parameters
         int uDegree = 3;
         int vDegree = 3;
@@ -172,15 +179,16 @@ private:
         PyObject* correction = Py_True;
         double factor = 1.0;
 
-        static char* kwds_approx[] = {"Points", "UDegree", "VDegree", "NbUPoles", "NbVPoles",
-                                      "Smooth", "Weight", "Grad", "Bend", "Curv",
-                                      "Iterations", "Correction", "PatchFactor","UVDirs", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O|iiiiO!ddddiO!dO!",kwds_approx,
-                                        &o,&uDegree,&vDegree,&uPoles,&vPoles,
-                                        &PyBool_Type,&smooth,&weight,&grad,&bend,&curv,
-                                        &iteration,&PyBool_Type,&correction,&factor,
-                                        &PyTuple_Type,&uvdirs))
+        static const std::array<const char *, 15> kwds_approx{"Points", "UDegree", "VDegree", "NbUPoles", "NbVPoles",
+                                                              "Smooth", "Weight", "Grad", "Bend", "Curv", "Iterations",
+                                                              "Correction", "PatchFactor", "UVDirs", nullptr};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O|iiiiO!ddddiO!dO!", kwds_approx,
+                                                 &o, &uDegree, &vDegree, &uPoles, &vPoles,
+                                                 &PyBool_Type, &smooth, &weight, &grad, &bend, &curv,
+                                                 &iteration, &PyBool_Type, &correction, &factor,
+                                                 &PyTuple_Type, &uvdirs)) {
             throw Py::Exception();
+        }
 
         int uOrder = uDegree + 1;
         int vOrder = vDegree + 1;
@@ -237,8 +245,8 @@ private:
             }
 
             int index=0;
-            for (std::vector<Base::Vector3f>::iterator it = pts.begin(); it != pts.end(); ++it) {
-                clPoints(index++) = gp_Pnt(it->x, it->y, it->z);
+            for (const auto & pt : pts) {
+                clPoints(index++) = gp_Pnt(pt.x, pt.y, pt.z);
             }
 
             Reen::BSplineParameterCorrection pc(uOrder,vOrder,uPoles,vPoles);
@@ -250,8 +258,8 @@ private:
                 Base::Vector3d v = Py::Vector(t.getItem(1)).toVector();
                 pc.SetUV(u, v);
             }
-            pc.EnableSmoothing(PyObject_IsTrue(smooth) ? true : false, weight, grad, bend, curv);
-            hSurf = pc.CreateSurface(clPoints, iteration, PyObject_IsTrue(correction) ? true : false, factor);
+            pc.EnableSmoothing(Base::asBoolean(smooth), weight, grad, bend, curv);
+            hSurf = pc.CreateSurface(clPoints, iteration, Base::asBoolean(correction), factor);
             if (!hSurf.IsNull()) {
                 return Py::asObject(new Part::BSplineSurfacePy(new Part::GeomBSplineSurface(hSurf)));
             }
@@ -305,9 +313,9 @@ Mesh.show(m)
         int ksearch=5;
         double mu=2.5;
 
-        static char* kwds_greedy[] = {"Points", "SearchRadius", "Mu", "KSearch",
+        static const std::array<const char*,6> kwds_greedy {"Points", "SearchRadius", "Mu", "KSearch",
                                       "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!d|diO", kwds_greedy,
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!d|diO", kwds_greedy,
                                         &(Points::PointsPy::Type), &pts,
                                         &searchRadius, &mu, &ksearch, &vec))
             throw Py::Exception();
@@ -343,9 +351,9 @@ Mesh.show(m)
         int solverDivide=-1;
         double samplesPerNode=-1.0;
 
-        static char* kwds_poisson[] = {"Points", "KSearch", "OctreeDepth", "SolverDivide",
+        static const std::array<const char*,7> kwds_poisson {"Points", "KSearch", "OctreeDepth", "SolverDivide",
                                       "SamplesPerNode", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iiidO", kwds_poisson,
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iiidO", kwds_poisson,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &octreeDepth, &solverDivide, &samplesPerNode, &vec))
             throw Py::Exception();
@@ -412,8 +420,8 @@ Mesh.show(m)
         int width;
         int height;
 
-        static char* kwds_view[] = {"Points", "Width", "Height", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|ii", kwds_view,
+        static const std::array<const char*,4> kwds_view {"Points", "Width", "Height", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|ii", kwds_view,
                                         &(Points::PointsPy::Type), &pts,
                                         &width, &height))
             throw Py::Exception();
@@ -437,8 +445,8 @@ Mesh.show(m)
         PyObject *vec = 0;
         int ksearch=5;
 
-        static char* kwds_greedy[] = {"Points", "KSearch", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
+        static const std::array<const char*,4> kwds_greedy {"Points", "KSearch", "Normals", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &vec))
             throw Py::Exception();
@@ -469,8 +477,8 @@ Mesh.show(m)
         PyObject *vec = 0;
         int ksearch=5;
 
-        static char* kwds_greedy[] = {"Points", "KSearch", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
+        static const std::array<const char*,4> kwds_greedy {"Points", "KSearch", "Normals", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &vec))
             throw Py::Exception();
@@ -519,8 +527,8 @@ Mesh.show(m)
         PyObject *vec = 0;
         int ksearch=5;
 
-        static char* kwds_greedy[] = {"Points", "KSearch", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
+        static const std::array<const char*,4> kwds_greedy {"Points", "KSearch", "Normals", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_greedy,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &vec))
             throw Py::Exception();
@@ -558,9 +566,9 @@ Mesh.show(m)
         double boundarySmoothness = 0.2;
         double boundaryWeight = 0.0;
 
-        static char* kwds_approx[] = {"Points", "Degree", "Refinement", "Iterations",
+        static const std::array<const char*,9> kwds_approx {"Points", "Degree", "Refinement", "Iterations",
                                       "InteriorSmoothness", "InteriorWeight", "BoundarySmoothness", "BoundaryWeight", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iiidddd", kwds_approx,
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iiidddd", kwds_approx,
                                         &(Points::PointsPy::Type), &pts,
                                         &degree, &refinement, &iterations,
                                         &interiorSmoothness, &interiorWeight,
@@ -594,8 +602,8 @@ Mesh.show(m)
         double voxDimY = 0;
         double voxDimZ = 0;
 
-        static char* kwds_voxel[] = {"Points", "DimX", "DimY", "DimZ", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!d|dd", kwds_voxel,
+        static const std::array<const char*,5>  kwds_voxel {"Points", "DimX", "DimY", "DimZ", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!d|dd", kwds_voxel,
                                         &(Points::PointsPy::Type), &pts,
                                         &voxDimX, &voxDimY, &voxDimZ))
             throw Py::Exception();
@@ -637,8 +645,8 @@ Mesh.show(m)
         int ksearch=0;
         double searchRadius=0;
 
-        static char* kwds_normals[] = {"Points", "KSearch", "SearchRadius", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|id", kwds_normals,
+        static const std::array<const char*,4> kwds_normals {"Points", "KSearch", "SearchRadius", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|id", kwds_normals,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &searchRadius))
             throw Py::Exception();
@@ -666,8 +674,8 @@ Mesh.show(m)
         PyObject *vec = 0;
         int ksearch=5;
 
-        static char* kwds_segment[] = {"Points", "KSearch", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_segment,
+        static const std::array<const char*,4> kwds_segment {"Points", "KSearch", "Normals", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|iO", kwds_segment,
                                         &(Points::PointsPy::Type), &pts,
                                         &ksearch, &vec))
             throw Py::Exception();
@@ -706,8 +714,8 @@ Mesh.show(m)
         PyObject *pts;
         int ksearch=5;
 
-        static char* kwds_segment[] = {"Points", "KSearch", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|i", kwds_segment,
+        static const std::array<const char*,3> kwds_segment {"Points", "KSearch", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "O!|i", kwds_segment,
                                         &(Points::PointsPy::Type), &pts, &ksearch))
             throw Py::Exception();
 
@@ -775,8 +783,8 @@ Points.show(np)
         PyObject *vec = nullptr;
         const char* sacModelType = nullptr;
 
-        static char* kwds_sample[] = {"SacModel", "Points", "Normals", NULL};
-        if (!PyArg_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "sO!|O", kwds_sample,
+        static const std::array<const char*,4> kwds_sample {"SacModel", "Points", "Normals", NULL};
+        if (!Base::Wrapped_ParseTupleAndKeywords(args.ptr(), kwds.ptr(), "sO!|O", kwds_sample,
                                         &sacModelType, &(Points::PointsPy::Type), &pts, &vec))
             throw Py::Exception();
 
@@ -824,7 +832,7 @@ Points.show(np)
 
 PyObject* initModule()
 {
-    return (new Module)->module().ptr();
+    return Base::Interpreter().addModule(new Module);
 }
 
 } // namespace Reen
@@ -840,10 +848,11 @@ PyMOD_INIT_FUNC(ReverseEngineering)
     }
     catch(const Base::Exception& e) {
         PyErr_SetString(PyExc_ImportError, e.what());
-        PyMOD_Return(0);
+        PyMOD_Return(nullptr);
     }
 
     PyObject* mod = Reen::initModule();
     Base::Console().Log("Loading ReverseEngineering module... done\n");
     PyMOD_Return(mod);
 }
+// clang-format on

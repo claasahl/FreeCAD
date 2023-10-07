@@ -37,7 +37,7 @@ True if Draft_rc.__name__ else False
 __title__ = "FreeCAD Draft Workbench GUI Tools - Working plane-related tools"
 __author__ = ("Yorik van Havre, Werner Mayer, Martin Burbaum, Ken Cline, "
               "Dmitry Chigrin")
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 
 class Draft_WorkingPlaneProxy:
@@ -61,9 +61,10 @@ class Draft_WorkingPlaneProxy:
     def Activated(self):
         """Execute when the command is called."""
         if hasattr(App, "DraftWorkingPlane"):
+            App.DraftWorkingPlane.setup()
             App.ActiveDocument.openTransaction("Create WP proxy")
             Gui.addModule("Draft")
-            _cmd = "Draft.makeWorkingPlaneProxy("
+            _cmd = "Draft.make_workingplaneproxy("
             _cmd += "FreeCAD.DraftWorkingPlane.getPlacement()"
             _cmd += ")"
             Gui.doCommand(_cmd)

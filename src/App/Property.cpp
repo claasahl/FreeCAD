@@ -24,17 +24,18 @@
 #include "PreCompiled.h"
 
 #ifndef _PreComp_
-#	include <cassert>
+#include <cassert>
 #endif
 
-/// Here the FreeCAD includes sorted by Base,App,Gui......
+#include <atomic>
+#include <Base/Tools.h>
+#include <Base/Writer.h>
+#include <CXX/Objects.hxx>
+
 #include "Property.h"
 #include "ObjectIdentifier.h"
 #include "PropertyContainer.h"
-#include <Base/Exception.h>
-#include <Base/Tools.h>
-#include "Application.h"
-#include "DocumentObject.h"
+
 
 using namespace App;
 
@@ -49,21 +50,29 @@ TYPESYSTEM_SOURCE_ABSTRACT(App::Property , Base::Persistence)
 //**************************************************************************
 // Construction/Destruction
 
+static std::atomic<int64_t> _PropID;
+
 // Here is the implementation! Description should take place in the header file!
 Property::Property()
-  :father(0), myName(0)
+  : _id(++_PropID)
 {
-
 }
 
-Property::~Property()
-{
+Property::~Property() = default;
 
+const char* Property::getName() const
+{
+    return myName ? myName : "";
 }
 
-const char* Property::getName(void) const
+bool Property::hasName() const
 {
-    return myName;
+    return isValidName(myName);
+}
+
+bool Property::isValidName(const char* name)
+{
+    return name && name[0] != '\0';
 }
 
 std::string Property::getFullName() const {
@@ -79,7 +88,7 @@ std::string Property::getFullName() const {
     return name;
 }
 
-short Property::getType(void) const
+short Property::getType() const
 {
     short type = 0;
 #define GET_PTYPE(_name) do {\
@@ -106,12 +115,12 @@ void Property::syncType(unsigned type) {
     SYNC_PTYPE(NoPersist);
 }
 
-const char* Property::getGroup(void) const
+const char* Property::getGroup() const
 {
     return father->getPropertyGroup(this);
 }
 
-const char* Property::getDocumentation(void) const
+const char* Property::getDocumentation() const
 {
     return father->getPropertyDocumentation(this);
 }
@@ -153,7 +162,7 @@ namespace App {
  * active.
  */
 struct PropertyCleaner {
-    PropertyCleaner(Property *p)
+    explicit PropertyCleaner(Property *p)
         : prop(p)
     {
         ++_PropCleanerCounter;
@@ -162,7 +171,7 @@ struct PropertyCleaner {
         if(--_PropCleanerCounter)
             return;
         bool found = false;
-        while (_RemovedProps.size()) {
+        while (!_RemovedProps.empty()) {
             auto p = _RemovedProps.back();
             _RemovedProps.pop_back();
             if(p != prop)
@@ -212,7 +221,7 @@ void Property::setReadOnly(bool readOnly)
     this->setStatus(App::Property::ReadOnly, readOnly);
 }
 
-void Property::hasSetValue(void)
+void Property::hasSetValue()
 {
     PropertyCleaner guard(this);
     if (father) {
@@ -225,7 +234,7 @@ void Property::hasSetValue(void)
     StatusBits.set(Touched);
 }
 
-void Property::aboutToSetValue(void)
+void Property::aboutToSetValue()
 {
     if (father)
         father->onBeforeChange(this);
@@ -236,11 +245,11 @@ void Property::verifyPath(const ObjectIdentifier &p) const
     p.verify(*this);
 }
 
-Property *Property::Copy(void) const
+Property *Property::Copy() const
 {
     // have to be reimplemented by a subclass!
     assert(0);
-    return 0;
+    return nullptr;
 }
 
 void Property::Paste(const Property& /*from*/)
@@ -279,6 +288,8 @@ void Property::setStatus(Status pos, bool on) {
 }
 
 bool Property::isSame(const Property &other) const {
+    if(&other == this)
+        return true;
     if(other.getTypeId() != getTypeId() || getMemSize() != other.getMemSize())
         return false;
 

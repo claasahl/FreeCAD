@@ -20,13 +20,8 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #ifndef GUI_TASKVIEW_TaskPipeParameters_H
 #define GUI_TASKVIEW_TaskPipeParameters_H
-
-#include <Gui/TaskView/TaskView.h>
-#include <Gui/Selection.h>
-#include <Gui/TaskView/TaskDialog.h>
 
 #include "TaskSketchBasedParameters.h"
 #include "ViewProviderPipe.h"
@@ -38,6 +33,7 @@ class Property;
 }
 
 namespace Gui {
+class ButtonGroup;
 class ViewProvider;
 }
 
@@ -47,37 +43,61 @@ class Ui_TaskPipeParameters;
 class Ui_TaskPipeOrientation;
 class Ui_TaskPipeScaling;
 
+/// Convenience class to maintain states between the various task boxes for pipe
+class StateHandlerTaskPipe
+{
+public:
+    enum SelectionModes {
+        none = 0,
+        refProfile,
+        refSpine,
+        refSpineEdgeAdd,
+        refSpineEdgeRemove,
+        refAuxSpine,
+        refAuxSpineEdgeAdd,
+        refAuxSpineEdgeRemove,
+        refSectionAdd,
+        refSectionRemove
+    };
+
+public:
+    StateHandlerTaskPipe() {selectionMode = SelectionModes::none;}
+    ~StateHandlerTaskPipe() = default;
+
+    // only keeping getter because task boxes shouldn't need to change this
+    // and task dialog is already friend
+    enum SelectionModes getSelectionMode() {return selectionMode;}
+
+private:
+    enum SelectionModes selectionMode;
+    friend class TaskDlgPipeParameters;
+};
+
 
 class TaskPipeParameters : public TaskSketchBasedParameters
 {
     Q_OBJECT
 
 public:
-    TaskPipeParameters(ViewProviderPipe *PipeView, bool newObj=false, QWidget *parent = 0);
-    ~TaskPipeParameters();
+    explicit TaskPipeParameters(ViewProviderPipe *PipeView, bool newObj=false, QWidget *parent = nullptr);
+    ~TaskPipeParameters() override;
 
     bool accept();
 
 private Q_SLOTS:
     void onTangentChanged(bool checked);
     void onTransitionChanged(int);
-    void onButtonRefAdd(bool checked);
-    void onButtonRefRemove(bool checked);
-    void onBaseButton(bool checked);
     void onProfileButton(bool checked);
     void onDeleteEdge();
 
 protected:
-    enum selectionModes { none, refAdd, refRemove, refObjAdd, refProfile };
-    selectionModes selectionMode = none;
-
     void removeFromListWidget(QListWidget*w, QString name);
     bool referenceSelected(const Gui::SelectionChanges& msg) const;
 
 private:
-    void onSelectionChanged(const Gui::SelectionChanges& msg);
+    void onSelectionChanged(const Gui::SelectionChanges& msg) override;
     void updateUI();
-    void clearButtons(const selectionModes notThis=none);
+    void clearButtons();
     void exitSelectionMode();
     void setVisibilityOfSpineAndProfile();
 
@@ -91,6 +111,8 @@ private:
 private:
     QWidget* proxy;
     std::unique_ptr<Ui_TaskPipeParameters> ui;
+    StateHandlerTaskPipe *stateHandler;
+    friend class TaskDlgPipeParameters;
 };
 
 class TaskPipeOrientation : public TaskSketchBasedParameters
@@ -98,36 +120,32 @@ class TaskPipeOrientation : public TaskSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskPipeOrientation(ViewProviderPipe *PipeView, bool newObj=false, QWidget *parent = 0);
-    virtual ~TaskPipeOrientation();
+    explicit TaskPipeOrientation(ViewProviderPipe *PipeView, bool newObj=false, QWidget *parent = nullptr);
+    ~TaskPipeOrientation() override;
 
 
 private Q_SLOTS:
     void onOrientationChanged(int);
-    void onButtonRefAdd(bool checked);
-    void onButtonRefRemove(bool checked);
     void updateUI(int idx);
-    void onBaseButton(bool checked);
     void onClearButton();
     void onCurvelinearChanged(bool checked);
     void onBinormalChanged(double);
     void onDeleteItem();
 
 protected:
-    enum selectionModes { none, refAdd, refRemove, refObjAdd };
-    selectionModes selectionMode = none;
-
     void removeFromListWidget(QListWidget*w, QString name);
     bool referenceSelected(const Gui::SelectionChanges& msg) const;
 
 private:
-    void onSelectionChanged(const Gui::SelectionChanges& msg);
-    void clearButtons(const selectionModes notThis=none);
+    void onSelectionChanged(const Gui::SelectionChanges& msg) override;
+    void clearButtons();
     void exitSelectionMode();
 
 private:
     QWidget* proxy;
     std::unique_ptr<Ui_TaskPipeOrientation> ui;
+    StateHandlerTaskPipe *stateHandler;
+    friend class TaskDlgPipeParameters;
 };
 
 
@@ -136,34 +154,30 @@ class TaskPipeScaling : public TaskSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskPipeScaling(ViewProviderPipe *PipeView,bool newObj=false,QWidget *parent = 0);
-    virtual ~TaskPipeScaling();
+    explicit TaskPipeScaling(ViewProviderPipe *PipeView,bool newObj=false,QWidget *parent = nullptr);
+    ~TaskPipeScaling() override;
 
 private Q_SLOTS:
     void onScalingChanged(int);
-    void onButtonRefAdd(bool checked);
-    void onButtonRefRemove(bool checked);
     void updateUI(int idx);
     void onDeleteSection();
     void indexesMoved();
 
 protected:
-    enum selectionModes { none, refAdd, refRemove };
-    selectionModes selectionMode = none;
-
     void removeFromListWidget(QListWidget*w, QString name);
     bool referenceSelected(const Gui::SelectionChanges& msg) const;
 
 private:
-    void onSelectionChanged(const Gui::SelectionChanges& msg);
-    void clearButtons(const selectionModes notThis=none);
+    void onSelectionChanged(const Gui::SelectionChanges& msg) override;
+    void clearButtons();
     void exitSelectionMode();
 
 private:
     QWidget* proxy;
     std::unique_ptr<Ui_TaskPipeScaling> ui;
+    StateHandlerTaskPipe *stateHandler;
+    friend class TaskDlgPipeParameters;
 };
-
 
 /// simulation dialog for the TaskView
 class TaskDlgPipeParameters : public TaskDlgSketchBasedParameters
@@ -171,18 +185,24 @@ class TaskDlgPipeParameters : public TaskDlgSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskDlgPipeParameters(ViewProviderPipe *PipeView,bool newObj=false);
-    ~TaskDlgPipeParameters();
+    explicit TaskDlgPipeParameters(ViewProviderPipe *PipeView,bool newObj=false);
+    ~TaskDlgPipeParameters() override;
 
 public:
     /// is called by the framework if the dialog is accepted (Ok)
-    virtual bool accept();
+    bool accept() override;
     /// is called by the framework if the dialog is rejected (Cancel)
+
+protected Q_SLOTS:
+    void onButtonToggled(QAbstractButton *button, bool checked);
 
 protected:
     TaskPipeParameters  *parameter;
     TaskPipeOrientation *orientation;
     TaskPipeScaling     *scaling;
+
+    Gui::ButtonGroup *buttonGroup;
+    StateHandlerTaskPipe *stateHandler;
 };
 
 } //namespace PartDesignGui

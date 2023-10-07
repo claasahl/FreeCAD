@@ -23,7 +23,7 @@
 
 __title__ = "Result import for Z88 displacements format"
 __author__ = "Bernd Hahnebach"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 ## @package importZ88O2Results
 #  \ingroup FEM
@@ -36,12 +36,7 @@ from FreeCAD import Console
 
 
 # ********* generic FreeCAD import and export methods *********
-if open.__module__ == "__builtin__":
-    # because we'll redefine open below (Python2)
-    pyopen = open
-elif open.__module__ == "io":
-    # because we'll redefine open below (Python3)
-    pyopen = open
+pyopen = open
 
 
 def open(
@@ -104,6 +99,7 @@ def import_z88_disp(
             result_mesh_object.FemMesh = femmesh
         else:
             Console.PrintError("Z88 mesh file z88i1.txt not found.\n")
+            return None
 
         # create result obj
         for result_set in disp_read["Results"]:
@@ -128,6 +124,7 @@ def import_z88_disp(
         Console.PrintError(
             "Problem on Z88 result file import. No nodes found in Z88 result file.\n"
         )
+        return None
     return res_obj
 
 

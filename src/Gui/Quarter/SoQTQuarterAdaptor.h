@@ -21,16 +21,14 @@
 #ifndef SIM_COIN3D_SOQTQUARTERADAPTOR_H
 #define SIM_COIN3D_SOQTQUARTERADAPTOR_H
 
-#include "Gui/Quarter/QuarterWidget.h"
-#include <Inventor/SoSceneManager.h>
-#include <Inventor/SbSphere.h>
 #include <Inventor/SoType.h>
-#include <Inventor/events/SoKeyboardEvent.h>
-#include <Inventor/lists/SoCallbackList.h>
-#include <Inventor/sensors/SoTimerSensor.h>
 #include <Inventor/actions/SoGetMatrixAction.h>
 #include <Inventor/actions/SoSearchAction.h>
-#include <vector>
+#include <Inventor/lists/SoCallbackList.h>
+#include <Inventor/sensors/SoTimerSensor.h>
+
+#include "QuarterWidget.h"
+
 
 class SbViewportRegion;
 class SoCamera;
@@ -42,15 +40,17 @@ namespace Coin3D {
 namespace Quarter {
 
 class SoQTQuarterAdaptor;
-typedef void SoQTQuarterAdaptorCB(void* data, SoQTQuarterAdaptor* viewer);
+using SoQTQuarterAdaptorCB = void (void* data, SoQTQuarterAdaptor* viewer);
 
 class QUARTER_DLL_API SoQTQuarterAdaptor :  public QuarterWidget {
+
+    Q_OBJECT
 
 public:
     explicit SoQTQuarterAdaptor(QWidget* parent = nullptr, const QtGLWidget* sharewidget = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
     explicit SoQTQuarterAdaptor(const QtGLFormat& format, QWidget* parent = nullptr, const QtGLWidget* shareWidget = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
     explicit SoQTQuarterAdaptor(QtGLContext* context, QWidget* parent = nullptr, const QtGLWidget* sharewidget = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
-    virtual ~SoQTQuarterAdaptor();
+    ~SoQTQuarterAdaptor() override;
 
     //the functions available in soqtviewer but missing in quarter
     QWidget* getWidget();
@@ -91,13 +91,14 @@ public:
 
     virtual void saveHomePosition();
     virtual void resetToHomePosition();
+    virtual bool hasHomePosition() const {return m_storedcamera;}
 
-    virtual void setSceneGraph(SoNode* root) {
+    void setSceneGraph(SoNode* root) override {
         QuarterWidget::setSceneGraph(root);
     }
     
-    virtual bool processSoEvent(const SoEvent* event);
-    virtual void paintEvent(QPaintEvent*);
+    bool processSoEvent(const SoEvent* event) override;
+    void paintEvent(QPaintEvent*) override;
 
     //this functions still need to be ported
     virtual void afterRealizeHook() {} //enables spacenav and joystick in soqt, dunno if this is needed

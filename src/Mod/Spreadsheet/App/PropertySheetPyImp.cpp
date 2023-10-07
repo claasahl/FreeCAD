@@ -20,43 +20,27 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 
-#include "Mod/Spreadsheet/App/PropertySheet.h"
-
+#include "PropertySheet.h"
 // inclusion of the generated files (generated out of PropertySheetPy.xml)
+// clang-format off
 #include "PropertySheetPy.h"
 #include "PropertySheetPy.cpp"
+// clang-format on
+
 
 using namespace Spreadsheet;
 
-struct PropertySheetPyInit {
-
-    PyMappingMethods methods;
-
-    PropertySheetPyInit() {
-        methods.mp_length = 0;
-        methods.mp_ass_subscript = 0;
-        methods.mp_subscript = [](PyObject *o, PyObject *key) {
-            return static_cast<PropertySheetPy*>(o)->getPropertySheetPtr()->getPyValue(key);
-        };
-
-        PropertySheetPy::Type.tp_as_mapping = &methods;
-    }
-};
-
-static PropertySheetPyInit _PropertySheetPyInit;
-
 // returns a string which represents the object e.g. when printed in python
-std::string PropertySheetPy::representation(void) const
+std::string PropertySheetPy::representation() const
 {
-    return std::string("<PropertySheet object>");
+    return {"<PropertySheet object>"};
 }
 
-PyObject *PropertySheetPy::PyMake(struct _typeobject *, PyObject *, PyObject *)  // Python wrapper
+PyObject* PropertySheetPy::PyMake(struct _typeobject*, PyObject*, PyObject*)  // Python wrapper
 {
-    // create a new instance of PropertySheetPy and the Twin object 
+    // create a new instance of PropertySheetPy and the Twin object
     return new PropertySheetPy(new PropertySheet);
 }
 
@@ -66,12 +50,17 @@ int PropertySheetPy::PyInit(PyObject* /*args*/, PyObject* /*kwd*/)
     return 0;
 }
 
-PyObject *PropertySheetPy::getCustomAttributes(const char* /*attr*/) const
+PyObject* PropertySheetPy::mapping_subscript(PyObject* o, PyObject* key)
 {
-    return 0;
+    return static_cast<PropertySheetPy*>(o)->getPropertySheetPtr()->getPyValue(key);
+}
+
+PyObject* PropertySheetPy::getCustomAttributes(const char* /*attr*/) const
+{
+    return nullptr;
 }
 
 int PropertySheetPy::setCustomAttributes(const char* /*attr*/, PyObject* /*obj*/)
 {
-    return 0; 
+    return 0;
 }

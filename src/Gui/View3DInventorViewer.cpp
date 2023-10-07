@@ -20,10 +20,10 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
+
 #ifndef _PreComp_
-# include <float.h>
+# include <cfloat>
 # ifdef FC_OS_WIN32
 #  include <windows.h>
 # endif
@@ -31,126 +31,94 @@
 # include <OpenGL/gl.h>
 # else
 # include <GL/gl.h>
+# include <GL/glext.h>
+# include <GL/glu.h>
 # endif
+
 # include <Inventor/SbBox.h>
 # include <Inventor/SoEventManager.h>
+# include <Inventor/SoPickedPoint.h>
 # include <Inventor/actions/SoGetBoundingBoxAction.h>
 # include <Inventor/actions/SoGetMatrixAction.h>
 # include <Inventor/actions/SoHandleEventAction.h>
-# include <Inventor/actions/SoToVRML2Action.h>
-# include <Inventor/actions/SoWriteAction.h>
+# include <Inventor/actions/SoRayPickAction.h>
+# include <Inventor/annex/HardCopy/SoVectorizePSAction.h>
+# include <Inventor/details/SoDetail.h>
+# include <Inventor/elements/SoLightModelElement.h>
+# include <Inventor/elements/SoOverrideElement.h>
 # include <Inventor/elements/SoViewportRegionElement.h>
+# include <Inventor/errors/SoDebugError.h>
+# include <Inventor/events/SoEvent.h>
+# include <Inventor/events/SoKeyboardEvent.h>
+# include <Inventor/events/SoMotion3Event.h>
 # include <Inventor/manips/SoClipPlaneManip.h>
+# include <Inventor/nodes/SoAnnotation.h>
 # include <Inventor/nodes/SoBaseColor.h>
 # include <Inventor/nodes/SoCallback.h>
-# include <Inventor/nodes/SoCoordinate3.h>
 # include <Inventor/nodes/SoCube.h>
 # include <Inventor/nodes/SoDirectionalLight.h>
 # include <Inventor/nodes/SoEventCallback.h>
-# include <Inventor/nodes/SoFaceSet.h>
-# include <Inventor/nodes/SoImage.h>
-# include <Inventor/nodes/SoIndexedFaceSet.h>
 # include <Inventor/nodes/SoLightModel.h>
-# include <Inventor/nodes/SoLocateHighlight.h>
 # include <Inventor/nodes/SoMaterial.h>
-# include <Inventor/nodes/SoMaterialBinding.h>
 # include <Inventor/nodes/SoOrthographicCamera.h>
 # include <Inventor/nodes/SoPerspectiveCamera.h>
-# include <Inventor/nodes/SoRotationXYZ.h>
+# include <Inventor/nodes/SoPickStyle.h>
+# include <Inventor/nodes/SoScale.h>
+# include <Inventor/nodes/SoSelection.h>
 # include <Inventor/nodes/SoSeparator.h>
-# include <Inventor/nodes/SoShapeHints.h>
+# include <Inventor/nodes/SoSphere.h>
 # include <Inventor/nodes/SoSwitch.h>
 # include <Inventor/nodes/SoTransform.h>
 # include <Inventor/nodes/SoTranslation.h>
-# include <Inventor/nodes/SoSelection.h>
-# include <Inventor/nodes/SoText2.h>
-# include <Inventor/actions/SoBoxHighlightRenderAction.h>
-# include <Inventor/events/SoEvent.h>
-# include <Inventor/events/SoKeyboardEvent.h>
-# include <Inventor/events/SoLocation2Event.h>
-# include <Inventor/events/SoMotion3Event.h>
-# include <Inventor/events/SoMouseButtonEvent.h>
-# include <Inventor/actions/SoRayPickAction.h>
-# include <Inventor/projectors/SbSphereSheetProjector.h>
-# include <Inventor/SoOffscreenRenderer.h>
-# include <Inventor/SoPickedPoint.h>
-# include <Inventor/VRMLnodes/SoVRMLGroup.h>
-# include <Inventor/nodes/SoPickStyle.h>
-# include <Inventor/nodes/SoTransparencyType.h>
-# include <QApplication>
+# include <QBitmap>
 # include <QEventLoop>
 # include <QKeyEvent>
-# include <QWheelEvent>
 # include <QMessageBox>
-# include <QTimer>
-# include <QStatusBar>
-# include <QBitmap>
 # include <QMimeData>
+# include <QTimer>
+# include <QVariantAnimation>
+# include <QWheelEvent>
 #endif
 
-#include <Inventor/SoEventManager.h>
-
-#if !defined(FC_OS_MACOSX)
-# include <GL/gl.h>
-# include <GL/glu.h>
-# include <GL/glext.h>
-#endif
-
-#include <QVariantAnimation>
-
-#include <sstream>
+#include <App/Document.h>
+#include <App/GeoFeatureGroupExtension.h>
 #include <Base/Console.h>
-#include <Base/Stream.h>
 #include <Base/FileInfo.h>
 #include <Base/Sequencer.h>
 #include <Base/Tools.h>
 #include <Base/UnitsApi.h>
-#include <App/GeoFeatureGroupExtension.h>
+#include <Quarter/devices/InputDevice.h>
+#include <Quarter/eventhandlers/EventFilter.h>
 
 #include "View3DInventorViewer.h"
-#include "ViewProviderDocumentObject.h"
+#include "Application.h"
+#include "CornerCrossLetters.h"
+#include "Document.h"
+#include "GLPainter.h"
+#include "MainWindow.h"
+#include "NaviCube.h"
+#include "NavigationStyle.h"
+#include "Selection.h"
+#include "SoAxisCrossKit.h"
 #include "SoFCBackgroundGradient.h"
-#include "SoFCColorBar.h"
-#include "SoFCColorLegend.h"
-#include "SoFCColorGradient.h"
+#include "SoFCBoundingBox.h"
+#include "SoFCDB.h"
+#include "SoFCInteractiveElement.h"
 #include "SoFCOffscreenRenderer.h"
 #include "SoFCSelection.h"
-#include "SoFCUnifiedSelection.h"
-#include "SoFCInteractiveElement.h"
-#include "SoFCBoundingBox.h"
-#include "SoAxisCrossKit.h"
-#include "View3DInventorRiftViewer.h"
-
-#include "Selection.h"
 #include "SoFCSelectionAction.h"
-#include "SoFCVectorizeU3DAction.h"
+#include "SoFCUnifiedSelection.h"
 #include "SoFCVectorizeSVGAction.h"
-#include "SoFCDB.h"
-#include "Application.h"
-#include "MainWindow.h"
-#include "NavigationStyle.h"
-#include "ViewProvider.h"
-#include "SpaceballEvent.h"
-#include "GLPainter.h"
-#include <Quarter/eventhandlers/EventFilter.h>
-#include <Quarter/devices/InputDevice.h>
-#include "View3DViewerPy.h"
-#include <Gui/NaviCube.h>
-
-#include <Inventor/draggers/SoCenterballDragger.h>
-#include <Inventor/annex/Profiler/SoProfiler.h>
-#include <Inventor/annex/HardCopy/SoVectorizePSAction.h>
-#include <Inventor/elements/SoOverrideElement.h>
-#include <Inventor/elements/SoLightModelElement.h>
-#include <QGesture>
-
+#include "SoFCVectorizeU3DAction.h"
 #include "SoTouchEvents.h"
-#include "Document.h"
+#include "SpaceballEvent.h"
+#include "View3DInventorRiftViewer.h"
+#include "View3DViewerPy.h"
 #include "ViewParams.h"
-
+#include "ViewProvider.h"
+#include "ViewProviderDocumentObject.h"
 #include "ViewProviderLink.h"
 
-#include "CornerCrossLetters.h"
 
 FC_LOG_LEVEL_INIT("3DViewer",true,true)
 
@@ -234,20 +202,20 @@ while the progress bar is running.
 class Gui::ViewerEventFilter : public QObject
 {
 public:
-    ViewerEventFilter() {}
-    ~ViewerEventFilter() {}
+    ViewerEventFilter() = default;
+    ~ViewerEventFilter() override = default;
 
-    bool eventFilter(QObject* obj, QEvent* event) {
+    bool eventFilter(QObject* obj, QEvent* event) override {
         // Bug #0000607: Some mice also support horizontal scrolling which however might
         // lead to some unwanted zooming when pressing the MMB for panning.
         // Thus, we filter out horizontal scrolling.
         if (event->type() == QEvent::Wheel) {
-            QWheelEvent* we = static_cast<QWheelEvent*>(event);
+            auto we = static_cast<QWheelEvent*>(event);
             if (qAbs(we->angleDelta().x()) > qAbs(we->angleDelta().y()))
                 return true;
         }
         else if (event->type() == QEvent::KeyPress) {
-            QKeyEvent* ke = static_cast<QKeyEvent*>(event);
+            auto ke = static_cast<QKeyEvent*>(event);
             if (ke->matches(QKeySequence::SelectAll)) {
                 static_cast<View3DInventorViewer*>(obj)->selectAll();
                 return true;
@@ -257,14 +225,14 @@ public:
             return false;
 
         if (event->type() == Spaceball::ButtonEvent::ButtonEventType) {
-            Spaceball::ButtonEvent* buttonEvent = static_cast<Spaceball::ButtonEvent*>(event);
+            auto buttonEvent = static_cast<Spaceball::ButtonEvent*>(event);
             if (!buttonEvent) {
                 Base::Console().Log("invalid spaceball button event\n");
                 return true;
             }
         }
         else if (event->type() == Spaceball::MotionEvent::MotionEventType) {
-            Spaceball::MotionEvent* motionEvent = static_cast<Spaceball::MotionEvent*>(event);
+            auto motionEvent = static_cast<Spaceball::MotionEvent*>(event);
             if (!motionEvent) {
                 Base::Console().Log("invalid spaceball motion event\n");
                 return true;
@@ -277,15 +245,15 @@ public:
 
 class SpaceNavigatorDevice : public Quarter::InputDevice {
 public:
-    SpaceNavigatorDevice(void) {}
-    virtual ~SpaceNavigatorDevice() {}
-    virtual const SoEvent* translateEvent(QEvent* event) {
+    SpaceNavigatorDevice() = default;
+    ~SpaceNavigatorDevice() override = default;
+    const SoEvent* translateEvent(QEvent* event) override {
 
         if (event->type() == Spaceball::MotionEvent::MotionEventType) {
-            Spaceball::MotionEvent* motionEvent = static_cast<Spaceball::MotionEvent*>(event);
+            auto motionEvent = static_cast<Spaceball::MotionEvent*>(event);
             if (!motionEvent) {
                 Base::Console().Log("invalid spaceball motion event\n");
-                return NULL;
+                return nullptr;
             }
 
             motionEvent->setHandled(true);
@@ -302,7 +270,7 @@ public:
             yRot.setValue(SbVec3f(0.0, 1.0, 0.0), static_cast<float>(motionEvent->rotationY()) * rotationConstant);
             zRot.setValue(SbVec3f(0.0, 0.0, 1.0), static_cast<float>(motionEvent->rotationZ()) * rotationConstant);
 
-            SoMotion3Event* motion3Event = new SoMotion3Event;
+            auto motion3Event = new SoMotion3Event;
             motion3Event->setTranslation(translationVector);
             motion3Event->setRotation(xRot * yRot * zRot);
             motion3Event->setPosition(this->mousepos);
@@ -310,7 +278,7 @@ public:
             return motion3Event;
         }
 
-        return NULL;
+        return nullptr;
     }
 };
 
@@ -322,25 +290,83 @@ public:
  *
  * \section overview Overview
  * \todo Overview and complements for the 3D Viewer
+ *
+ * \section trouble Troubleshooting
+ * When it's needed to capture OpenGL function calls then the utility apitrace
+ * can be very useful: https://github.com/apitrace/apitrace/blob/master/docs/USAGE.markdown
+ *
+ * To better locate the problematic code it's possible to add custom log messages.
+ * For the prerequisites check:
+ * https://github.com/apitrace/apitrace/blob/master/docs/USAGE.markdown#
+ * emitting-annotations-to-the-trace
+ * \code
+ * #include <GL/glext.h>
+ * #include <Inventor/C/glue/gl.h>
+ *
+ * void GLRender(SoGLRenderAction* glra)
+ * {
+ *     int context = glra->getCacheContext();
+ *     const cc_glglue * glue = cc_glglue_instance(context);
+ *
+ *     PFNGLPUSHDEBUGGROUPPROC glPushDebugGroup = (PFNGLPUSHDEBUGGROUPPROC)
+ *     cc_glglue_getprocaddress(glue, "glPushDebugGroup");
+ *     PFNGLDEBUGMESSAGEINSERTARBPROC glDebugMessageInsert = (PFNGLDEBUGMESSAGEINSERTARBPROC)
+ *     cc_glglue_getprocaddress(glue, "glDebugMessageInsert");
+ *     PFNGLPOPDEBUGGROUPPROC glPopDebugGroup = (PFNGLPOPDEBUGGROUPPROC)
+ *     cc_glglue_getprocaddress(glue, "glPopDebugGroup");
+ *
+ *     glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, __FUNCTION__);
+ * ...
+ *     glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_OTHER,
+ *                          0, GL_DEBUG_SEVERITY_MEDIUM, -1, "begin_blabla");
+ * ...
+ *     glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_OTHER,
+ *                          0, GL_DEBUG_SEVERITY_MEDIUM, -1, "end_blabla");
+ * ...
+ *     glPopDebugGroup();
+ * }
+ * \endcode
  */
 
 
 // *************************************************************************
 
 View3DInventorViewer::View3DInventorViewer(QWidget* parent, const QtGLWidget* sharewidget)
-    : Quarter::SoQTQuarterAdaptor(parent, sharewidget), SelectionObserver(false,0),
-      editViewProvider(0), navigation(0),
-      renderType(Native), framebuffer(0), axisCross(0), axisGroup(0), editing(false), redirected(false),
-      allowredir(false), overrideMode("As Is"), _viewerPy(0)
+    : Quarter::SoQTQuarterAdaptor(parent, sharewidget)
+    , SelectionObserver(false, ResolveMode::NoResolve)
+    , editViewProvider(nullptr)
+    , objectGroup(nullptr)
+    , navigation(nullptr)
+    , renderType(Native)
+    , framebuffer(nullptr)
+    , axisCross(nullptr)
+    , axisGroup(nullptr)
+    , rotationCenterGroup(nullptr)
+    , editing(false)
+    , redirected(false)
+    , allowredir(false)
+    , overrideMode("As Is")
+    , _viewerPy(nullptr)
 {
     init();
 }
 
 View3DInventorViewer::View3DInventorViewer(const QtGLFormat& format, QWidget* parent, const QtGLWidget* sharewidget)
-    : Quarter::SoQTQuarterAdaptor(format, parent, sharewidget), SelectionObserver(false,0),
-      editViewProvider(0), navigation(0),
-      renderType(Native), framebuffer(0), axisCross(0), axisGroup(0), editing(false), redirected(false),
-      allowredir(false), overrideMode("As Is"), _viewerPy(0)
+    : Quarter::SoQTQuarterAdaptor(format, parent, sharewidget)
+    , SelectionObserver(false, ResolveMode::NoResolve)
+    , editViewProvider(nullptr)
+    , objectGroup(nullptr)
+    , navigation(nullptr)
+    , renderType(Native)
+    , framebuffer(nullptr)
+    , axisCross(nullptr)
+    , axisGroup(nullptr)
+    , rotationCenterGroup(nullptr)
+    , editing(false)
+    , redirected(false)
+    , allowredir(false)
+    , overrideMode("As Is")
+    , _viewerPy(nullptr)
 {
     init();
 }
@@ -350,7 +376,7 @@ void View3DInventorViewer::init()
     static bool _cacheModeInited;
     if(!_cacheModeInited) {
         _cacheModeInited = true;
-        pcViewProviderRoot = 0;
+        pcViewProviderRoot = nullptr;
         setRenderCache(-1);
     }
 
@@ -367,7 +393,7 @@ void View3DInventorViewer::init()
     // setting up the defaults for the spin rotation
     initialize();
 
-    SoOrthographicCamera* cam = new SoOrthographicCamera;
+    auto cam = new SoOrthographicCamera;
     cam->position = SbVec3f(0, 0, 1);
     cam->height = 1;
     cam->nearDistance = 0.5;
@@ -394,10 +420,10 @@ void View3DInventorViewer::init()
     this->foregroundroot = new SoSeparator;
     this->foregroundroot->ref();
 
-    SoLightModel* lm = new SoLightModel;
+    auto lm = new SoLightModel;
     lm->model = SoLightModel::BASE_COLOR;
 
-    SoBaseColor* bc = new SoBaseColor;
+    auto bc = new SoBaseColor;
     bc->rgb = SbColor(1, 1, 0);
 
     cam = new SoOrthographicCamera;
@@ -406,36 +432,16 @@ void View3DInventorViewer::init()
     cam->nearDistance = 0;
     cam->farDistance = 10;
 
-    // dragger
-    //SoSeparator * dragSep = new SoSeparator();
-    //SoScale *scale = new SoScale();
-    //scale->scaleFactor = SbVec3f  (0.2,0.2,0.2);
-    //dragSep->addChild(scale);
-    //SoCenterballDragger *dragger = new SoCenterballDragger();
-    //dragger->center = SbVec3f  (0.8,0.8,0);
-    ////dragger->rotation = SbRotation(rrot[0],rrot[1],rrot[2],rrot[3]);
-    //dragSep->addChild(dragger);
-
     this->foregroundroot->addChild(cam);
     this->foregroundroot->addChild(lm);
     this->foregroundroot->addChild(bc);
-    //this->foregroundroot->addChild(dragSep);
 
-#if 0
-    // NOTE: For every mouse click event the SoSelection searches for the picked
-    // point which causes a certain slow-down because for all objects the primitives
-    // must be created. Using an SoSeparator avoids this drawback.
-    SoSelection* selectionRoot = new SoSelection();
-    selectionRoot->addSelectionCallback(View3DInventorViewer::selectCB, this);
-    selectionRoot->addDeselectionCallback(View3DInventorViewer::deselectCB, this);
-    selectionRoot->setPickFilterCallback(View3DInventorViewer::pickFilterCB, this);
-#else
     // NOTE: For every mouse click event the SoFCUnifiedSelection searches for the picked
     // point which causes a certain slow-down because for all objects the primitives
     // must be created. Using an SoSeparator avoids this drawback.
     selectionRoot = new Gui::SoFCUnifiedSelection();
     selectionRoot->applySettings();
-#endif
+
     // set the ViewProvider root node
     pcViewProviderRoot = selectionRoot;
 
@@ -464,37 +470,9 @@ void View3DInventorViewer::init()
     pcViewProviderRoot->addChild(cb);
 #endif
 
-    pcGroupOnTop = new SoSeparator;
-    pcGroupOnTop->ref();
-    pcViewProviderRoot->addChild(pcGroupOnTop);
+    inventorSelection = std::make_unique<View3DInventorSelection>(selectionRoot);
 
-    auto pcGroupOnTopPickStyle = new SoPickStyle;
-    pcGroupOnTopPickStyle->style = SoPickStyle::UNPICKABLE;
-    // pcGroupOnTopPickStyle->style = SoPickStyle::SHAPE_ON_TOP;
-    pcGroupOnTopPickStyle->setOverride(true);
-    pcGroupOnTop->addChild(pcGroupOnTopPickStyle);
-
-    coin_setenv("COIN_SEPARATE_DIFFUSE_TRANSPARENCY_OVERRIDE", "1", TRUE);
-    auto pcOnTopMaterial = new SoMaterial;
-    pcOnTopMaterial->transparency = 0.5;
-    pcOnTopMaterial->diffuseColor.setIgnored(true);
-    pcOnTopMaterial->setOverride(true);
-    pcGroupOnTop->addChild(pcOnTopMaterial);
-
-    auto selRoot = new SoFCSelectionRoot;
-    selRoot->selectionStyle = SoFCSelectionRoot::PassThrough;
-    pcGroupOnTopSel = selRoot;
-    pcGroupOnTopSel->setName("GroupOnTopSel");
-    pcGroupOnTopSel->ref();
-    pcGroupOnTop->addChild(pcGroupOnTopSel);
-    selRoot = new SoFCSelectionRoot;
-    selRoot->selectionStyle = SoFCSelectionRoot::PassThrough;
-    pcGroupOnTopPreSel = selRoot;
-    pcGroupOnTopPreSel->setName("GroupOnTopPreSel");
-    pcGroupOnTopPreSel->ref();
-    pcGroupOnTop->addChild(pcGroupOnTopPreSel);
-
-    pcClipPlane = 0;
+    pcClipPlane = nullptr;
 
     pcEditingRoot = new SoSeparator;
     pcEditingRoot->ref();
@@ -506,35 +484,38 @@ void View3DInventorViewer::init()
     pcEditingRoot->addChild(pcEditingTransform);
     pcViewProviderRoot->addChild(pcEditingRoot);
 
+    // Create group for the physical object
+    objectGroup = new SoGroup();
+    objectGroup->ref();
+    pcViewProviderRoot->addChild(objectGroup);
+
     // Set our own render action which show a bounding box if
     // the SoFCSelection::BOX style is set
     //
     // Important note:
     // When creating a new GL render action we have to copy over the cache context id
     // because otherwise we may get strange rendering behaviour. For more details see
-    // http://forum.freecadweb.org/viewtopic.php?f=10&t=7486&start=120#p74398 and for
+    // http://forum.freecad.org/viewtopic.php?f=10&t=7486&start=120#p74398 and for
     // the fix and some details what happens behind the scene have a look at this
-    // http://forum.freecadweb.org/viewtopic.php?f=10&t=7486&p=74777#p74736
+    // http://forum.freecad.org/viewtopic.php?f=10&t=7486&p=74777#p74736
     uint32_t id = this->getSoRenderManager()->getGLRenderAction()->getCacheContext();
     this->getSoRenderManager()->setGLRenderAction(new SoBoxSelectionRenderAction);
     this->getSoRenderManager()->getGLRenderAction()->setCacheContext(id);
 
     // set the transparency and antialiasing settings
-//  getGLRenderAction()->setTransparencyType(SoGLRenderAction::SORTED_OBJECT_BLEND);
     getSoRenderManager()->getGLRenderAction()->setTransparencyType(SoGLRenderAction::SORTED_OBJECT_SORTED_TRIANGLE_BLEND);
-//  getGLRenderAction()->setSmoothing(true);
 
     // Settings
     setSeekTime(0.4f);
 
-    if (isSeekValuePercentage() == false)
+    if (!isSeekValuePercentage())
         setSeekValueAsPercentage(true);
 
     setSeekDistance(100);
     setViewing(false);
 
     setBackgroundColor(QColor(25, 25, 25));
-    setGradientBackground(true);
+    setGradientBackground(Background::LinearGradient);
 
     // set some callback functions for user interaction
     addStartCallback(interactionStartCB);
@@ -572,40 +553,40 @@ View3DInventorViewer::~View3DInventorViewer()
     // It can happen that a document has several MDI views and when the about to be
     // closed 3D view is in edit mode the corresponding view provider must be restored
     // because otherwise it might be left in a broken state
-    // See https://forum.freecadweb.org/viewtopic.php?f=3&t=39720
+    // See https://forum.freecad.org/viewtopic.php?f=3&t=39720
     if (restoreEditingRoot) {
         resetEditingRoot(false);
     }
 
     // cleanup
     this->backgroundroot->unref();
-    this->backgroundroot = 0;
+    this->backgroundroot = nullptr;
     this->foregroundroot->unref();
-    this->foregroundroot = 0;
+    this->foregroundroot = nullptr;
     this->pcBackGround->unref();
-    this->pcBackGround = 0;
+    this->pcBackGround = nullptr;
 
-    setSceneGraph(0);
+    setSceneGraph(nullptr);
     this->pEventCallback->unref();
-    this->pEventCallback = 0;
+    this->pEventCallback = nullptr;
     // Note: It can happen that there is still someone who references
     // the root node but isn't destroyed when closing this viewer so
     // that it prevents all children from being deleted. To reduce this
     // likelihood we explicitly remove all child nodes now.
     coinRemoveAllChildren(this->pcViewProviderRoot);
     this->pcViewProviderRoot->unref();
-    this->pcViewProviderRoot = 0;
+    this->pcViewProviderRoot = nullptr;
+    this->objectGroup->unref();
+    this->objectGroup = nullptr;
     this->backlight->unref();
-    this->backlight = 0;
+    this->backlight = nullptr;
 
-    this->pcGroupOnTop->unref();
-    this->pcGroupOnTopPreSel->unref();
-    this->pcGroupOnTopSel->unref();
+    inventorSelection.reset(nullptr);
 
     this->pcEditingRoot->unref();
     this->pcEditingTransform->unref();
 
-    if(this->pcClipPlane)
+    if (this->pcClipPlane)
         this->pcClipPlane->unref();
 
     delete this->navigation;
@@ -620,7 +601,7 @@ View3DInventorViewer::~View3DInventorViewer()
     delete viewerEventFilter;
 
     if (_viewerPy) {
-        static_cast<View3DInventorViewerPy*>(_viewerPy)->_viewer = 0;
+        static_cast<View3DInventorViewerPy*>(_viewerPy)->_viewer = nullptr;
         Py_DECREF(_viewerPy);
     }
 
@@ -665,11 +646,11 @@ void View3DInventorViewer::createStandardCursors(double dpr)
 void View3DInventorViewer::aboutToDestroyGLContext()
 {
     if (naviCube) {
-        QtGLWidget* gl = qobject_cast<QtGLWidget*>(this->viewport());
+        auto gl = qobject_cast<QtGLWidget*>(this->viewport());
         if (gl)
             gl->makeCurrent();
         delete naviCube;
-        naviCube = 0;
+        naviCube = nullptr;
         naviCubeEnabled = false;
     }
 }
@@ -679,9 +660,10 @@ void View3DInventorViewer::setDocument(Gui::Document* pcDocument)
     // write the document the viewer belongs to the selection node
     guiDocument = pcDocument;
     selectionRoot->pcDocument = pcDocument;
+    inventorSelection->setDocument(pcDocument);
 
     if(pcDocument) {
-        const auto &sels = Selection().getSelection(pcDocument->getDocument()->getName(),0);
+        const auto &sels = Selection().getSelection(pcDocument->getDocument()->getName(), ResolveMode::NoResolve);
         for(auto &sel : sels) {
             SelectionChanges Chng(SelectionChanges::ShowSelection,
                     sel.DocName,sel.FeatName,sel.SubName);
@@ -702,191 +684,6 @@ void View3DInventorViewer::initialize()
 
     this->axiscrossEnabled = true;
     this->axiscrossSize = 10;
-}
-
-void View3DInventorViewer::clearGroupOnTop() {
-    if(objectsOnTop.size() || objectsOnTopPreSel.size()) {
-        objectsOnTop.clear();
-        objectsOnTopPreSel.clear();
-        SoSelectionElementAction action(SoSelectionElementAction::None,true);
-        action.apply(pcGroupOnTopPreSel);
-        action.apply(pcGroupOnTopSel);
-        coinRemoveAllChildren(pcGroupOnTopSel);
-        coinRemoveAllChildren(pcGroupOnTopPreSel);
-        FC_LOG("clear annotation");
-    }
-}
-
-void View3DInventorViewer::checkGroupOnTop(const SelectionChanges &Reason) {
-    if(Reason.Type == SelectionChanges::SetSelection || Reason.Type == SelectionChanges::ClrSelection) {
-        clearGroupOnTop();
-        if(Reason.Type == SelectionChanges::ClrSelection)
-            return;
-    }
-    if(Reason.Type == SelectionChanges::RmvPreselect ||
-       Reason.Type == SelectionChanges::RmvPreselectSignal)
-    {
-        SoSelectionElementAction action(SoSelectionElementAction::None,true);
-        action.apply(pcGroupOnTopPreSel);
-        coinRemoveAllChildren(pcGroupOnTopPreSel);
-        objectsOnTopPreSel.clear();
-        return;
-    }
-    if(!getDocument() || !Reason.pDocName || !Reason.pDocName[0] || !Reason.pObjectName)
-        return;
-    auto obj = getDocument()->getDocument()->getObject(Reason.pObjectName);
-    if(!obj || !obj->getNameInDocument())
-        return;
-    std::string key(obj->getNameInDocument());
-    key += '.';
-    auto subname = Reason.pSubName;
-    if(subname)
-        key += subname;
-    if(Reason.Type == SelectionChanges::RmvSelection) {
-        auto &objs = objectsOnTop;
-        auto pcGroup = pcGroupOnTopSel;
-        auto it = objs.find(key.c_str());
-        if(it == objs.end())
-            return;
-        int index = pcGroup->findChild(it->second);
-        if(index >= 0) {
-            auto node = static_cast<SoFCPathAnnotation*>(it->second);
-            SoSelectionElementAction action(node->getDetail()?
-                    SoSelectionElementAction::Remove:SoSelectionElementAction::None,true);
-            auto path = node->getPath();
-            SoTempPath tmpPath(2 + (path ? path->getLength() : 0));
-            tmpPath.ref();
-            tmpPath.append(pcGroup);
-            tmpPath.append(node);
-            tmpPath.append(node->getPath());
-            action.setElement(node->getDetail());
-            action.apply(&tmpPath);
-            tmpPath.unrefNoDelete();
-            pcGroup->removeChild(index);
-            FC_LOG("remove annotation " << Reason.Type << " " << key);
-        }else
-            FC_LOG("remove annotation object " << Reason.Type << " " << key);
-        objs.erase(it);
-        return;
-    }
-
-    auto &objs = Reason.Type==SelectionChanges::SetPreselect?objectsOnTopPreSel:objectsOnTop;
-    auto pcGroup = Reason.Type==SelectionChanges::SetPreselect?pcGroupOnTopPreSel:pcGroupOnTopSel;
-
-    if(objs.find(key.c_str())!=objs.end())
-        return;
-    auto vp = dynamic_cast<ViewProviderDocumentObject*>(
-            Application::Instance->getViewProvider(obj));
-    if(!vp || !vp->isSelectable() || !vp->isShow())
-        return;
-    auto svp = vp;
-    if(subname && *subname) {
-        auto sobj = obj->getSubObject(subname);
-        if(!sobj || !sobj->getNameInDocument())
-            return;
-        if(sobj!=obj) {
-            svp = dynamic_cast<ViewProviderDocumentObject*>(
-                    Application::Instance->getViewProvider(sobj));
-            if(!svp || !svp->isSelectable())
-                return;
-        }
-    }
-    int onTop;
-    // onTop==2 means on top only if whole object is selected,
-    // onTop==3 means on top only if some sub-element is selected
-    // onTop==1 means either
-    if(Gui::Selection().needPickedList())
-        onTop = 1;
-    else if(vp->OnTopWhenSelected.getValue())
-        onTop = vp->OnTopWhenSelected.getValue();
-    else
-        onTop = svp->OnTopWhenSelected.getValue();
-    if(Reason.Type == SelectionChanges::SetPreselect) {
-        SoHighlightElementAction action;
-        action.setHighlighted(true);
-        action.setColor(selectionRoot->colorHighlight.getValue());
-        action.apply(pcGroupOnTopPreSel);
-        if(!onTop)
-            onTop = 2;
-    }else {
-        if(!onTop)
-            return;
-        SoSelectionElementAction action(SoSelectionElementAction::All);
-        action.setColor(selectionRoot->colorSelection.getValue());
-        action.apply(pcGroupOnTopSel);
-    }
-    if(onTop==2 || onTop==3) {
-        if(subname && *subname) {
-            size_t len = strlen(subname);
-            if(subname[len-1]=='.') {
-                // ending with '.' means whole object selection
-                if(onTop == 3)
-                    return;
-            }else if(onTop==2)
-                return;
-        }else if(onTop==3)
-            return;
-    }
-
-    std::vector<ViewProvider*> groups;
-    auto grpVp = vp;
-    for(auto childVp=vp;;childVp=grpVp) {
-        auto grp = App::GeoFeatureGroupExtension::getGroupOfObject(childVp->getObject());
-        if(!grp || !grp->getNameInDocument()) break;
-        grpVp = dynamic_cast<ViewProviderDocumentObject*>(
-                Application::Instance->getViewProvider(grp));
-        if(!grpVp) break;
-        auto childRoot = grpVp->getChildRoot();
-        auto modeSwitch = grpVp->getModeSwitch();
-        auto idx = modeSwitch->whichChild.getValue();
-        if(idx<0 || idx>=modeSwitch->getNumChildren() ||
-           modeSwitch->getChild(idx)!=childRoot)
-        {
-            FC_LOG("skip " << obj->getFullName() << '.' << (subname?subname:"")
-                    << ", hidden inside geo group");
-            return;
-        }
-        if(childRoot->findChild(childVp->getRoot())<0) {
-            FC_LOG("cannot find '" << childVp->getObject()->getFullName()
-                    << "' in geo group '" << grp->getNameInDocument() << "'");
-            break;
-        }
-        groups.push_back(grpVp);
-    }
-
-    SoTempPath path(10);
-    path.ref();
-
-    for(auto it=groups.rbegin();it!=groups.rend();++it) {
-        auto grpVp = *it;
-        path.append(grpVp->getRoot());
-        path.append(grpVp->getModeSwitch());
-        path.append(grpVp->getChildRoot());
-    }
-
-    SoDetail *det = 0;
-    if(vp->getDetailPath(subname, &path,true,det) && path.getLength()) {
-        auto node = new SoFCPathAnnotation;
-        node->setPath(&path);
-        pcGroup->addChild(node);
-        if(det) {
-            SoSelectionElementAction action(SoSelectionElementAction::Append,true);
-            action.setElement(det);
-            SoTempPath tmpPath(path.getLength()+2);
-            tmpPath.ref();
-            tmpPath.append(pcGroup);
-            tmpPath.append(node);
-            tmpPath.append(&path);
-            action.apply(&tmpPath);
-            tmpPath.unrefNoDelete();
-            node->setDetail(det);
-            det = 0;
-        }
-        FC_LOG("add annotation " << Reason.Type << " " << key);
-        objs[key.c_str()] = node;
-    }
-    delete det;
-    path.unrefNoDelete();
 }
 
 /// @cond DOXERR
@@ -910,7 +707,7 @@ void View3DInventorViewer::onSelectionChanged(const SelectionChanges &_Reason)
             Reason.Type = SelectionChanges::RmvSelection;
         // fall through
     case SelectionChanges::SetPreselect:
-        if(Reason.SubType!=2) // 2 means it is triggered from tree view
+        if(Reason.SubType != SelectionChanges::MsgSource::TreeView)
             break;
         // fall through
     case SelectionChanges::RmvPreselect:
@@ -919,7 +716,7 @@ void View3DInventorViewer::onSelectionChanged(const SelectionChanges &_Reason)
     case SelectionChanges::AddSelection:
     case SelectionChanges::RmvSelection:
     case SelectionChanges::ClrSelection:
-        checkGroupOnTop(Reason);
+        inventorSelection->checkGroupOnTop(Reason);
         break;
     case SelectionChanges::SetPreselectSignal:
         break;
@@ -971,8 +768,15 @@ void View3DInventorViewer::addViewProvider(ViewProvider* pcProvider)
     SoSeparator* root = pcProvider->getRoot();
 
     if (root) {
-        if(pcProvider->canAddToSceneGraph())
-            pcViewProviderRoot->addChild(root);
+        if (pcProvider->canAddToSceneGraph()) {
+            // Add to the physical object group if related to the physical object otherwise add to the scene graph
+            if (pcProvider->isPartOfPhysicalObject()) {
+                objectGroup->addChild(root);
+            }
+            else {
+                pcViewProviderRoot->addChild(root);
+            }
+        }
         _ViewProviderMap[root] = pcProvider;
     }
 
@@ -996,9 +800,15 @@ void View3DInventorViewer::removeViewProvider(ViewProvider* pcProvider)
     SoSeparator* root = pcProvider->getRoot();
 
     if (root) {
-        int index = pcViewProviderRoot->findChild(root);
-        if(index>=0)
+        int index = objectGroup->findChild(root);
+        if (index >= 0) {
+            objectGroup->removeChild(index);
+        }
+
+        index = pcViewProviderRoot->findChild(root);
+        if (index >= 0) {
             pcViewProviderRoot->removeChild(index);
+        }
         _ViewProviderMap.erase(root);
     }
 
@@ -1099,14 +909,15 @@ void View3DInventorViewer::resetEditingRoot(bool updateLinks)
     }
 }
 
-SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec2s& pos, ViewProvider* vp) const
+SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec2s& pos, const ViewProvider* vp) const
 {
     SoPath *path;
-    if(vp == editViewProvider && pcEditingRoot->getNumChildren()>1) {
+    if (vp == editViewProvider && pcEditingRoot->getNumChildren() > 1) {
         path = new SoPath(1);
         path->ref();
         path->append(pcEditingRoot);
-    }else{
+    }
+    else {
         //first get the path to this node and calculate the current transformation
         SoSearchAction sa;
         sa.setNode(vp->getRoot());
@@ -1120,13 +931,13 @@ SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec2s& pos, ViewProvi
     SoGetMatrixAction gm(getSoRenderManager()->getViewportRegion());
     gm.apply(path);
 
-    SoTransform* trans = new SoTransform;
+    auto trans = new SoTransform;
     trans->setMatrix(gm.getMatrix());
     trans->ref();
 
     // build a temporary scenegraph only keeping this viewproviders nodes and the accumulated
     // transformation
-    SoSeparator* root = new SoSeparator;
+    auto root = new SoSeparator;
     root->ref();
     root->addChild(getSoRenderManager()->getCamera());
     root->addChild(trans);
@@ -1142,20 +953,21 @@ SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec2s& pos, ViewProvi
     path->unref();
 
     SoPickedPoint* pick = rp.getPickedPoint();
-    return (pick ? new SoPickedPoint(*pick) : 0);
+    return (pick ? new SoPickedPoint(*pick) : nullptr);
 }
 
-SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec3f& pos,const SbVec3f& dir, ViewProvider* vp) const
+SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec3f& pos, const SbVec3f& dir, const ViewProvider* vp) const
 {
     // Note: There seems to be a  bug with setRay() which causes SoRayPickAction
     // to fail to get intersections between the ray and a line
 
     SoPath *path;
-    if(vp == editViewProvider && pcEditingRoot->getNumChildren()>1) {
+    if (vp == editViewProvider && pcEditingRoot->getNumChildren() > 1) {
         path = new SoPath(1);
         path->ref();
         path->append(pcEditingRoot);
-    }else{
+    }
+    else {
         //first get the path to this node and calculate the current setTransformation
         SoSearchAction sa;
         sa.setNode(vp->getRoot());
@@ -1171,11 +983,11 @@ SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec3f& pos,const SbVe
 
     // build a temporary scenegraph only keeping this viewproviders nodes and the accumulated
     // transformation
-    SoTransform* trans = new SoTransform;
+    auto trans = new SoTransform;
     trans->ref();
     trans->setMatrix(gm.getMatrix());
 
-    SoSeparator* root = new SoSeparator;
+    auto root = new SoSeparator;
     root->ref();
     root->addChild(getSoRenderManager()->getCamera());
     root->addChild(trans);
@@ -1193,7 +1005,7 @@ SoPickedPoint* View3DInventorViewer::getPointOnRay(const SbVec3f& pos,const SbVe
     // returns a copy of the point
     SoPickedPoint* pick = rp.getPickedPoint();
     //return (pick ? pick->copy() : 0); // needs the same instance of CRT under MS Windows
-    return (pick ? new SoPickedPoint(*pick) : 0);
+    return (pick ? new SoPickedPoint(*pick) : nullptr);
 }
 
 void View3DInventorViewer::setEditingViewProvider(Gui::ViewProvider* p, int ModNum)
@@ -1219,7 +1031,7 @@ void View3DInventorViewer::resetEditingViewProvider()
 
         this->editViewProvider->unsetEditViewer(this);
         removeEventCallback(SoEvent::getClassTypeId(), Gui::ViewProvider::eventCallback,this->editViewProvider);
-        this->editViewProvider = 0;
+        this->editViewProvider = nullptr;
     }
 }
 
@@ -1307,31 +1119,54 @@ void View3DInventorViewer::setGLWidgetCB(void* userdata, SoAction* action)
     // Coin error in SoNode::GLRenderS(): GL error: 'GL_STACK_UNDERFLOW', nodetype:
     // Separator (set envvar COIN_GLERROR_DEBUGGING=1 and re-run to get more information)
     if (action->isOfType(SoGLRenderAction::getClassTypeId())) {
-        QWidget* gl = reinterpret_cast<QWidget*>(userdata);
+        auto gl = static_cast<QWidget*>(userdata);
         SoGLWidgetElement::set(action->getState(), qobject_cast<QtGLWidget*>(gl));
     }
 }
 
 void View3DInventorViewer::handleEventCB(void* ud, SoEventCallback* n)
 {
-    View3DInventorViewer* that = reinterpret_cast<View3DInventorViewer*>(ud);
+    auto that = static_cast<View3DInventorViewer*>(ud);
     SoGLRenderAction* glra = that->getSoRenderManager()->getGLRenderAction();
     SoAction* action = n->getAction();
     SoGLRenderActionElement::set(action->getState(), glra);
     SoGLWidgetElement::set(action->getState(), qobject_cast<QtGLWidget*>(that->getGLWidget()));
 }
 
-void View3DInventorViewer::setGradientBackground(bool on)
+void View3DInventorViewer::setGradientBackground(View3DInventorViewer::Background grad)
 {
-    if (on && backgroundroot->findChild(pcBackGround) == -1)
-        backgroundroot->addChild(pcBackGround);
-    else if (!on && backgroundroot->findChild(pcBackGround) != -1)
-        backgroundroot->removeChild(pcBackGround);
+    switch (grad) {
+    case Background::NoGradient:
+        if (backgroundroot->findChild(pcBackGround) != -1) {
+            backgroundroot->removeChild(pcBackGround);
+        }
+        break;
+    case Background::LinearGradient:
+        pcBackGround->setGradient(SoFCBackgroundGradient::LINEAR);
+        if (backgroundroot->findChild(pcBackGround) == -1) {
+            backgroundroot->addChild(pcBackGround);
+        }
+        break;
+    case Background::RadialGradient:
+        pcBackGround->setGradient(SoFCBackgroundGradient::RADIAL);
+        if (backgroundroot->findChild(pcBackGround) == -1) {
+            backgroundroot->addChild(pcBackGround);
+        }
+        break;
+    }
 }
 
-bool View3DInventorViewer::hasGradientBackground() const
+View3DInventorViewer::Background View3DInventorViewer::getGradientBackground() const
 {
-    return (backgroundroot->findChild(pcBackGround) != -1);
+    if (backgroundroot->findChild(pcBackGround) == -1) {
+        return Background::NoGradient;
+    }
+
+    if (pcBackGround->getGradient() == SoFCBackgroundGradient::LINEAR) {
+        return Background::LinearGradient;
+    }
+
+    return Background::RadialGradient;
 }
 
 void View3DInventorViewer::setGradientBackgroundColor(const SbColor& fromColor,
@@ -1373,7 +1208,7 @@ void View3DInventorViewer::setRenderCache(int mode)
         // transparency type.
         //
         // For more details see:
-        // https://forum.freecadweb.org/viewtopic.php?f=18&t=43305&start=10#p412537
+        // https://forum.freecad.org/viewtopic.php?f=18&t=43305&start=10#p412537
         coin_setenv("COIN_AUTO_CACHING", "0", TRUE);
 
         int setting = ViewParams::instance()->getRenderCache();
@@ -1411,7 +1246,7 @@ void View3DInventorViewer::setEnabledNaviCube(bool on)
     naviCubeEnabled = on;
 }
 
-bool View3DInventorViewer::isEnabledNaviCube(void) const
+bool View3DInventorViewer::isEnabledNaviCube() const
 {
     return naviCubeEnabled;
 }
@@ -1422,7 +1257,7 @@ void View3DInventorViewer::setNaviCubeCorner(int c)
         naviCube->setCorner(static_cast<NaviCube::Corner>(c));
 }
 
-NaviCube* View3DInventorViewer::getNavigationCube() const
+NaviCube* View3DInventorViewer::getNaviCube() const
 {
     return naviCube;
 }
@@ -1430,12 +1265,12 @@ NaviCube* View3DInventorViewer::getNavigationCube() const
 void View3DInventorViewer::setAxisCross(bool on)
 {
     SoNode* scene = getSceneGraph();
-    SoSeparator* sep = static_cast<SoSeparator*>(scene);
+    auto sep = static_cast<SoSeparator*>(scene);
 
     if (on) {
         if (!axisGroup) {
             axisCross = new Gui::SoShapeScale;
-            Gui::SoAxisCrossKit* axisKit = new Gui::SoAxisCrossKit();
+            auto axisKit = new Gui::SoAxisCrossKit();
             axisKit->set("xAxis.appearance.drawStyle", "lineWidth 2");
             axisKit->set("yAxis.appearance.drawStyle", "lineWidth 2");
             axisKit->set("zAxis.appearance.drawStyle", "lineWidth 2");
@@ -1450,30 +1285,103 @@ void View3DInventorViewer::setAxisCross(bool on)
     else {
         if (axisGroup) {
             sep->removeChild(axisGroup);
-            axisGroup = 0;
+            axisGroup = nullptr;
         }
     }
 }
 
-bool View3DInventorViewer::hasAxisCross(void)
+bool View3DInventorViewer::hasAxisCross()
 {
     return axisGroup;
 }
 
+void View3DInventorViewer::showRotationCenter(bool show)
+{
+    SoNode* scene = getSceneGraph();
+    if (!scene) {
+        return;
+    }
+
+    auto sep = static_cast<SoSeparator*>(scene);
+
+    bool showEnabled = App::GetApplication()
+                           .GetParameterGroupByPath("User parameter:BaseApp/Preferences/View")
+                           ->GetBool("ShowRotationCenter", true);
+
+    if (show && showEnabled) {
+        SbBool found;
+        SbVec3f center = navigation->getRotationCenter(found);
+
+        if (!found) {
+            return;
+        }
+
+        if (!rotationCenterGroup) {
+            float size = App::GetApplication()
+                             .GetParameterGroupByPath("User parameter:BaseApp/Preferences/View")
+                             ->GetFloat("RotationCenterSize", 5.0);
+
+            unsigned long rotationCenterColor =
+                App::GetApplication()
+                    .GetParameterGroupByPath("User parameter:BaseApp/Preferences/View")
+                    ->GetUnsigned("RotationCenterColor", 4278190131);
+
+            QColor color = App::Color::fromPackedRGBA<QColor>(rotationCenterColor);
+
+            rotationCenterGroup = new SoSkipBoundingGroup();
+
+            auto sphere = new SoSphere();
+
+            // There needs to be a non-transparent object to ensure the transparent sphere works when opening an new empty document
+            auto hidden = new SoSeparator();
+            auto hiddenScale = new SoScale();
+            hiddenScale->scaleFactor = SbVec3f(0, 0, 0);
+            hidden->addChild(hiddenScale);
+            hidden->addChild(sphere);
+
+            auto complexity = new SoComplexity();
+            complexity->value = 1;
+
+            auto material = new SoMaterial();
+            material->emissiveColor = SbColor(color.redF(), color.greenF(), color.blueF());
+            material->transparency = 1.0F - color.alphaF();
+
+            auto translation = new SoTranslation();
+            translation->translation.setValue(center);
+
+            auto annotation = new SoAnnotation();
+            annotation->addChild(complexity);
+            annotation->addChild(material);
+            annotation->addChild(sphere);
+
+            auto scaledSphere = new SoShapeScale();
+            scaledSphere->setPart("shape", annotation);
+            scaledSphere->scaleFactor = size;
+
+            rotationCenterGroup->addChild(translation);
+            rotationCenterGroup->addChild(hidden);
+            rotationCenterGroup->addChild(scaledSphere);
+
+            sep->addChild(rotationCenterGroup);
+        }
+    }
+    else {
+        if (rotationCenterGroup) {
+            sep->removeChild(rotationCenterGroup);
+            rotationCenterGroup = nullptr;
+        }
+    }
+}
+
 void View3DInventorViewer::setNavigationType(Base::Type t)
 {
-    if (t.isBad())
-        return;
-
     if (this->navigation && this->navigation->getTypeId() == t)
         return; // nothing to do
 
-    Base::BaseClass* base = static_cast<Base::BaseClass*>(t.createInstance());
-    if (!base)
-        return;
-
-    if (!base->getTypeId().isDerivedFrom(NavigationStyle::getClassTypeId())) {
-        delete base;
+    Base::Type type = Base::Type::getTypeIfDerivedFrom(t.getName(), NavigationStyle::getClassTypeId());
+    auto ns = static_cast<NavigationStyle*>(type.createInstance());
+    // createInstance could return a null pointer
+    if (!ns) {
 #if FC_DEBUG
         SoDebugError::postWarning("View3DInventorViewer::setNavigationType",
                                   "Navigation object must be of type NavigationStyle.");
@@ -1481,7 +1389,6 @@ void View3DInventorViewer::setNavigationType(Base::Type t)
         return;
     }
 
-    NavigationStyle* ns = static_cast<NavigationStyle*>(base);
     if (this->navigation) {
         ns->operator = (*this->navigation);
         delete this->navigation;
@@ -1495,7 +1402,7 @@ NavigationStyle* View3DInventorViewer::navigationStyle() const
     return this->navigation;
 }
 
-SoDirectionalLight* View3DInventorViewer::getBacklight(void) const
+SoDirectionalLight* View3DInventorViewer::getBacklight() const
 {
     return this->backlight;
 }
@@ -1505,7 +1412,7 @@ void View3DInventorViewer::setBacklight(SbBool on)
     this->backlight->on = on;
 }
 
-SbBool View3DInventorViewer::isBacklight(void) const
+SbBool View3DInventorViewer::isBacklight() const
 {
     return this->backlight->on.getValue();
 }
@@ -1516,7 +1423,7 @@ void View3DInventorViewer::setSceneGraph(SoNode* root)
     if (!root) {
         _ViewProviderSet.clear();
         _ViewProviderMap.clear();
-        editViewProvider = 0;
+        editViewProvider = nullptr;
     }
 
     SoSearchAction sa;
@@ -1536,14 +1443,12 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
     // Save picture methods:
     // FramebufferObject -- viewer renders into FBO (no offscreen)
     // CoinOffscreenRenderer -- Coin's offscreen rendering method
-    // PixelBuffer -- Qt's pixel buffer used for offscreen rendering (only Qt4)
     // Otherwise (Default) -- Qt's FBO used for offscreen rendering
     std::string saveMethod = App::GetApplication().GetParameterGroupByPath
         ("User parameter:BaseApp/Preferences/View")->GetASCII("SavePicture");
 
     bool useFramebufferObject = false;
     bool useGrabFramebuffer = false;
-    bool usePixelBuffer = false;
     bool useCoinOffscreenRenderer = false;
     if (saveMethod == "FramebufferObject") {
         useFramebufferObject = true;
@@ -1551,20 +1456,17 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
     else if (saveMethod == "GrabFramebuffer") {
         useGrabFramebuffer = true;
     }
-    else if (saveMethod == "PixelBuffer") {
-        usePixelBuffer = true;
-    }
     else if (saveMethod == "CoinOffscreenRenderer") {
         useCoinOffscreenRenderer = true;
     }
 
     if (useFramebufferObject) {
-        View3DInventorViewer* self = const_cast<View3DInventorViewer*>(this);
+        auto self = const_cast<View3DInventorViewer*>(this);
         self->imageFromFramebuffer(w, h, s, bg, img);
         return;
     }
     else if (useGrabFramebuffer) {
-        View3DInventorViewer* self = const_cast<View3DInventorViewer*>(this);
+        auto self = const_cast<View3DInventorViewer*>(this);
         img = self->grabFramebuffer();
         img = img.mirrored();
         img = img.scaledToWidth(w);
@@ -1583,7 +1485,7 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
     //If we need to support grayscale images with must either use SoOffscreenRenderer::LUMINANCE or
     //SoOffscreenRenderer::LUMINANCE_TRANSPARENCY.
 
-    SoCallback* cb = 0;
+    SoCallback* cb = nullptr;
 
     // for an invalid color use the viewer's current background color
     QColor bgColor;
@@ -1601,7 +1503,7 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
         bgColor = bg;
     }
 
-    SoSeparator* root = new SoSeparator;
+    auto root = new SoSeparator;
     root->ref();
 
 #if (COIN_MAJOR_VERSION >= 4)
@@ -1609,7 +1511,7 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
     // multiple times internally the biggest viewport size is stored and set to the SoGLRenderAction.
     // The trick is to add a callback node and override the viewport size with what we want.
     if (useCoinOffscreenRenderer) {
-        SoCallback* cbvp = new SoCallback;
+        auto cbvp = new SoCallback;
         cbvp->setCallback(setViewportCB);
         root->addChild(cbvp);
     }
@@ -1623,23 +1525,17 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
     }
 
     if (!this->shading) {
-        SoLightModel* lm = new SoLightModel;
+        auto lm = new SoLightModel;
         lm->model = SoLightModel::BASE_COLOR;
         root->addChild(lm);
     }
 
     root->addChild(getHeadlight());
     root->addChild(camera);
-    SoCallback* gl = new SoCallback;
+    auto gl = new SoCallback;
     gl->setCallback(setGLWidgetCB, this->getGLWidget());
     root->addChild(gl);
     root->addChild(pcViewProviderRoot);
-
-#if !defined(HAVE_QT5_OPENGL)
-    if (useBackground)
-        root->addChild(cb);
-#endif
-
     root->addChild(foregroundroot);
 
     try {
@@ -1648,7 +1544,6 @@ void View3DInventorViewer::savePicture(int w, int h, int s, const QColor& bg, QI
             SoQtOffscreenRenderer renderer(vp);
             renderer.setNumPasses(s);
             renderer.setInternalTextureFormat(getInternalTextureFormat());
-            renderer.setPbufferEnable(usePixelBuffer);
             if (bgColor.isValid())
                 renderer.setBackgroundColor(SbColor4f(bgColor.redF(), bgColor.greenF(), bgColor.blueF(), bgColor.alphaF()));
             if (!renderer.render(root))
@@ -1766,7 +1661,7 @@ void View3DInventorViewer::setSelectionEnabled(const SbBool enable)
     static_cast<Gui::SoFCUnifiedSelection*>(root)->selectionRole.setValue(enable);
 }
 
-SbBool View3DInventorViewer::isSelectionEnabled(void) const
+SbBool View3DInventorViewer::isSelectionEnabled() const
 {
     SoNode* root = getSceneGraph();
     return static_cast<Gui::SoFCUnifiedSelection*>(root)->selectionRole.getValue();
@@ -1815,38 +1710,38 @@ SbVec2f View3DInventorViewer::screenCoordsOfPath(SoPath* path) const
         imageCoords[1] += (height-width) / 2.0;
     }
 
-    return SbVec2f(imageCoords[0], imageCoords[1]);
+    return {imageCoords[0], imageCoords[1]};
 }
 
 std::vector<SbVec2f> View3DInventorViewer::getGLPolygon(const std::vector<SbVec2s>& pnts) const
 {
-    const SbViewportRegion& vp = this->getSoRenderManager()->getViewportRegion();
-    const SbVec2s& sz = vp.getWindowSize();
-    short w,h;
-    sz.getValue(w,h);
-    const SbVec2s& sp = vp.getViewportSizePixels();
-    const SbVec2s& op = vp.getViewportOriginPixels();
-    const SbVec2f& siz = vp.getViewportSize();
+    const SbViewportRegion &vp = this->getSoRenderManager()->getViewportRegion();
+    const SbVec2s &winSize = vp.getWindowSize();
+    short w, h;
+    winSize.getValue(w, h);
+    const SbVec2s &sp = vp.getViewportSizePixels();
+    const SbVec2s &op = vp.getViewportOriginPixels();
+    const SbVec2f &vpSize = vp.getViewportSize();
     float dX, dY;
-    siz.getValue(dX, dY);
+    vpSize.getValue(dX, dY);
     float fRatio = vp.getViewportAspectRatio();
 
     std::vector<SbVec2f> poly;
-    for (std::vector<SbVec2s>::const_iterator it = pnts.begin(); it != pnts.end(); ++it) {
-        SbVec2s loc = *it - op;
-        SbVec2f pos((float)loc[0]/(float)sp[0], (float)loc[1]/(float)sp[1]);
-        float pX,pY;
-        pos.getValue(pX,pY);
+    for (const auto & pnt : pnts) {
+        SbVec2s loc = pnt - op;
+        SbVec2f pos((float)loc[0] / (float)sp[0], (float)loc[1] / (float)sp[1]);
+        float pX, pY;
+        pos.getValue(pX, pY);
 
         // now calculate the real points respecting aspect ratio information
         //
         if (fRatio > 1.0f) {
-            pX = (pX - 0.5f*dX) * fRatio + 0.5f*dX;
-            pos.setValue(pX,pY);
+            pX = (pX - 0.5f * dX) * fRatio + 0.5f * dX;
+            pos.setValue(pX, pY);
         }
         else if (fRatio < 1.0f) {
-            pY = (pY - 0.5f*dY) / fRatio + 0.5f*dY;
-            pos.setValue(pX,pY);
+            pY = (pY - 0.5f * dY) / fRatio + 0.5f * dY;
+            pos.setValue(pX, pY);
         }
 
         poly.push_back(pos);
@@ -1866,7 +1761,7 @@ bool View3DInventorViewer::dumpToFile(SoNode* node, const char* filename, bool b
     bool ret = false;
     Base::FileInfo fi(filename);
 
-    if (fi.hasExtension("idtf") || fi.hasExtension("svg")) {
+    if (fi.hasExtension({"idtf", "svg"})) {
         int ps=4;
         QColor c = Qt::white;
         std::unique_ptr<SoVectorizeAction> vo;
@@ -1877,7 +1772,7 @@ bool View3DInventorViewer::dumpToFile(SoNode* node, const char* filename, bool b
         else if (fi.hasExtension("idtf")) {
             vo = std::unique_ptr<SoVectorizeAction>(new SoFCVectorizeU3DAction());
         }
-        else if (fi.hasExtension("ps") || fi.hasExtension("eps")) {
+        else if (fi.hasExtension({"ps", "eps"})) {
             vo = std::unique_ptr<SoVectorizeAction>(new SoVectorizePSAction());
         }
         else {
@@ -1947,9 +1842,9 @@ std::list<GLGraphicsItem*> View3DInventorViewer::getGraphicsItems() const
 std::list<GLGraphicsItem*> View3DInventorViewer::getGraphicsItemsOfType(const Base::Type& type) const
 {
     std::list<GLGraphicsItem*> items;
-    for (std::list<GLGraphicsItem*>::const_iterator it = this->graphicsItems.begin(); it != this->graphicsItems.end(); ++it) {
-        if ((*it)->isDerivedFrom(type))
-            items.push_back(*it);
+    for (auto it : this->graphicsItems) {
+        if (it->isDerivedFrom(type))
+            items.push_back(it);
     }
 
     return items;
@@ -1981,7 +1876,6 @@ int View3DInventorViewer::getNumSamples()
 
 GLenum View3DInventorViewer::getInternalTextureFormat() const
 {
-#if defined(HAVE_QT5_OPENGL)
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath
         ("User parameter:BaseApp/Preferences/View");
     std::string format = hGrp->GetASCII("InternalTextureFormat", "Default");
@@ -2020,10 +1914,6 @@ GLenum View3DInventorViewer::getInternalTextureFormat() const
         QOpenGLFramebufferObjectFormat fboFormat;
         return fboFormat.internalTextureFormat();
     }
-#else
-    //return GL_RGBA;
-    return GL_RGB;
-#endif
 }
 
 void View3DInventorViewer::setRenderType(const RenderType type)
@@ -2033,7 +1923,7 @@ void View3DInventorViewer::setRenderType(const RenderType type)
     glImage = QImage();
     if (type != Framebuffer) {
         delete framebuffer;
-        framebuffer = 0;
+        framebuffer = nullptr;
     }
 
     switch (type) {
@@ -2046,16 +1936,12 @@ void View3DInventorViewer::setRenderType(const RenderType type)
             int width = size[0];
             int height = size[1];
 
-            QtGLWidget* gl = static_cast<QtGLWidget*>(this->viewport());
+            auto gl = static_cast<QtGLWidget*>(this->viewport());
             gl->makeCurrent();
-#if !defined(HAVE_QT5_OPENGL)
-            framebuffer = new QtGLFramebufferObject(width, height, QtGLFramebufferObject::Depth);
-            renderToFramebuffer(framebuffer);
-#else
             QOpenGLFramebufferObjectFormat fboFormat;
             fboFormat.setSamples(getNumSamples());
             fboFormat.setAttachment(QtGLFramebufferObject::Depth);
-            QtGLFramebufferObject* fbo = new QtGLFramebufferObject(width, height, fboFormat);
+            auto fbo = new QtGLFramebufferObject(width, height, fboFormat);
             if (fbo->format().samples() > 0) {
                 renderToFramebuffer(fbo);
                 framebuffer = new QtGLFramebufferObject(fbo->size());
@@ -2067,7 +1953,6 @@ void View3DInventorViewer::setRenderType(const RenderType type)
                 renderToFramebuffer(fbo);
                 framebuffer = fbo;
             }
-#endif
         }
         break;
     case Image:
@@ -2085,17 +1970,10 @@ View3DInventorViewer::RenderType View3DInventorViewer::getRenderType() const
 
 QImage View3DInventorViewer::grabFramebuffer()
 {
-    QtGLWidget* gl = static_cast<QtGLWidget*>(this->viewport());
+    auto gl = static_cast<QtGLWidget*>(this->viewport());
     gl->makeCurrent();
 
     QImage res;
-#if !defined(HAVE_QT5_OPENGL)
-    int w = gl->width();
-    int h = gl->height();
-    QImage img(QSize(w,h), QImage::Format_RGB32);
-    glReadPixels(0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, img.bits());
-    res = img;
-#else
     const SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
     SbVec2s size = vp.getViewportSizePixels();
     int width = size[0];
@@ -2127,7 +2005,6 @@ QImage View3DInventorViewer::grabFramebuffer()
         painter.end();
         res = image;
     }
-#endif
 
     return res;
 }
@@ -2135,7 +2012,7 @@ QImage View3DInventorViewer::grabFramebuffer()
 void View3DInventorViewer::imageFromFramebuffer(int width, int height, int samples,
                                                 const QColor& bgcolor, QImage& img)
 {
-    QtGLWidget* gl = static_cast<QtGLWidget*>(this->viewport());
+    auto gl = static_cast<QtGLWidget*>(this->viewport());
     gl->makeCurrent();
 
     const QtGLContext* context = QtGLContext::currentContext();
@@ -2157,7 +2034,7 @@ void View3DInventorViewer::imageFromFramebuffer(int width, int height, int sampl
     QtGLFramebufferObject fbo(width, height, fboFormat);
 
     const QColor col = backgroundColor();
-    bool on = hasGradientBackground();
+    auto grad = getGradientBackground();
 
     int alpha = 255;
     QColor bgopaque = bgcolor;
@@ -2167,12 +2044,12 @@ void View3DInventorViewer::imageFromFramebuffer(int width, int height, int sampl
         if (alpha < 255)
             bgopaque.setRgb(255,255,255);
         setBackgroundColor(bgopaque);
-        setGradientBackground(false);
+        setGradientBackground(Background::NoGradient);
     }
 
     renderToFramebuffer(&fbo);
     setBackgroundColor(col);
-    setGradientBackground(on);
+    setGradientBackground(grad);
     img = fbo.toImage();
 
     // if background color isn't opaque manipulate the image
@@ -2215,9 +2092,6 @@ void View3DInventorViewer::renderToFramebuffer(QtGLFramebufferObject* fbo)
     glViewport(0, 0, width, height);
     glClearColor(col.redF(), col.greenF(), col.blueF(), col.alphaF());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // If on then transparent areas may shine through opaque areas
-    //glDepthRange(0.1,1.0);
 
     SoBoxSelectionRenderAction gl(SbViewportRegion(width, height));
     // When creating a new GL render action we have to copy over the cache context id
@@ -2266,6 +2140,7 @@ void View3DInventorViewer::renderFramebuffer()
     const SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
     SbVec2s size = vp.getViewportSizePixels();
 
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_LIGHTING);
     glViewport(0, 0, size[0], size[1]);
     glMatrixMode(GL_PROJECTION);
@@ -2293,14 +2168,13 @@ void View3DInventorViewer::renderFramebuffer()
     printDimension();
     navigation->redraw();
 
-    for (std::list<GLGraphicsItem*>::iterator it = this->graphicsItems.begin(); it != this->graphicsItems.end(); ++it)
-        (*it)->paintGL();
+    for (auto it : this->graphicsItems)
+        it->paintGL();
 
     if (naviCubeEnabled)
         naviCube->drawNaviCube();
 
-    glEnable(GL_LIGHTING);
-    glEnable(GL_DEPTH_TEST);
+    glPopAttrib();
 }
 
 void View3DInventorViewer::renderGLImage()
@@ -2308,6 +2182,7 @@ void View3DInventorViewer::renderGLImage()
     const SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
     SbVec2s size = vp.getViewportSizePixels();
 
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
     glDisable(GL_LIGHTING);
     glViewport(0, 0, size[0], size[1]);
     glMatrixMode(GL_PROJECTION);
@@ -2320,33 +2195,28 @@ void View3DInventorViewer::renderGLImage()
     glClear(GL_COLOR_BUFFER_BIT);
 
     glRasterPos2f(0,0);
-#if !defined(HAVE_QT5_OPENGL)
-    glDrawPixels(glImage.width(),glImage.height(),GL_RGBA,GL_UNSIGNED_BYTE,glImage.bits());
-#else
     glDrawPixels(glImage.width(),glImage.height(),GL_BGRA,GL_UNSIGNED_BYTE,glImage.bits());
-#endif
 
     printDimension();
     navigation->redraw();
 
-    for (std::list<GLGraphicsItem*>::iterator it = this->graphicsItems.begin(); it != this->graphicsItems.end(); ++it)
-        (*it)->paintGL();
+    for (auto it : this->graphicsItems)
+        it->paintGL();
 
     if (naviCubeEnabled)
         naviCube->drawNaviCube();
 
-    glEnable(GL_LIGHTING);
-    glEnable(GL_DEPTH_TEST);
+    glPopAttrib();
 }
 
 // #define ENABLE_GL_DEPTH_RANGE
 // The calls of glDepthRange inside renderScene() causes problems with transparent objects
-// so that's why it is disabled now: http://forum.freecadweb.org/viewtopic.php?f=3&t=6037&hilit=transparency
+// so that's why it is disabled now: http://forum.freecad.org/viewtopic.php?f=3&t=6037&hilit=transparency
 
 // Documented in superclass. Overrides this method to be able to draw
 // the axis cross, if selected, and to keep a continuous animation
 // upon spin.
-void View3DInventorViewer::renderScene(void)
+void View3DInventorViewer::renderScene()
 {
     // Must set up the OpenGL viewport manually, as upon resize
     // operations, Coin won't set it up until the SoGLRenderAction is
@@ -2373,6 +2243,7 @@ void View3DInventorViewer::renderScene(void)
     SoGLWidgetElement::set(state, qobject_cast<QtGLWidget*>(this->getGLWidget()));
     SoGLRenderActionElement::set(state, glra);
     SoGLVBOActivatedElement::set(state, this->vboEnabled);
+    drawSingleBackground(col);
     glra->apply(this->backgroundroot);
 
     navigation->updateAnimation();
@@ -2389,8 +2260,8 @@ void View3DInventorViewer::renderScene(void)
     }
     catch (const Base::MemoryException&) {
         // FIXME: If this exception appears then the background and camera position get broken somehow. (Werner 2006-02-01)
-        for (std::set<ViewProvider*>::iterator it = _ViewProviderSet.begin(); it != _ViewProviderSet.end(); ++it)
-            (*it)->hide();
+        for (auto it : _ViewProviderSet)
+            it->hide();
 
         inherited::actualRedraw();
         QMessageBox::warning(parentWidget(), QObject::tr("Out of memory"),
@@ -2423,16 +2294,11 @@ void View3DInventorViewer::renderScene(void)
         this->getSoRenderManager()->scheduleRedraw();
     }
 
-#if 0 // this breaks highlighting of edges
-    glDisable(GL_LIGHTING);
-    glDisable(GL_DEPTH_TEST);
-#endif
-
     printDimension();
     navigation->redraw();
 
-    for (std::list<GLGraphicsItem*>::iterator it = this->graphicsItems.begin(); it != this->graphicsItems.end(); ++it)
-        (*it)->paintGL();
+    for (auto it : this->graphicsItems)
+        it->paintGL();
 
     //fps rendering
     if (fpsEnabled) {
@@ -2445,11 +2311,6 @@ void View3DInventorViewer::renderScene(void)
 
     if (naviCubeEnabled)
         naviCube->drawNaviCube();
-
-#if 0 // this breaks highlighting of edges
-    glEnable(GL_LIGHTING);
-    glEnable(GL_DEPTH_TEST);
-#endif
 }
 
 void View3DInventorViewer::setSeekMode(SbBool on)
@@ -2470,26 +2331,58 @@ void View3DInventorViewer::setSeekMode(SbBool on)
                                 NavigationStyle::IDLE : NavigationStyle::INTERACT));
 }
 
+SbVec3f View3DInventorViewer::getCenterPointOnFocalPlane() const {
+    SoCamera* cam = getSoRenderManager()->getCamera();
+    if (!cam)
+        return {0. ,0. ,0. };
+
+    SbVec3f direction;
+    cam->orientation.getValue().multVec(SbVec3f(0, 0, -1), direction);
+    return cam->position.getValue() + cam->focalDistance.getValue() * direction;
+}
+
+float View3DInventorViewer::getMaxDimension() const {
+    float fHeight = -1.0;
+    float fWidth = -1.0;
+    getDimensions(fHeight, fWidth);
+    return std::max(fHeight, fWidth);
+}
+
+void View3DInventorViewer::getDimensions(float& fHeight, float& fWidth) const {
+    SoCamera* camera = getSoRenderManager()->getCamera();
+    if (!camera) // no camera there
+        return;
+
+    float aspectRatio = getViewportRegion().getViewportAspectRatio();
+
+    SoType type = camera->getTypeId();
+    if (type.isDerivedFrom(SoOrthographicCamera::getClassTypeId())) {
+        fHeight = static_cast<SoOrthographicCamera*>(camera)->height.getValue();
+        fWidth = fHeight;
+    }
+    else if (type.isDerivedFrom(SoPerspectiveCamera::getClassTypeId())) {
+        float fHeightAngle = static_cast<SoPerspectiveCamera*>(camera)->heightAngle.getValue();
+        fHeight = std::tan(fHeightAngle / 2.0) * 2.0 * camera->focalDistance.getValue();
+        fWidth = fHeight;
+    }
+
+    if (aspectRatio > 1.0) {
+        fWidth *= aspectRatio;
+    }
+    else {
+        fHeight *= aspectRatio;
+    }
+}
+
 void View3DInventorViewer::printDimension()
 {
-    SoCamera* cam = getSoRenderManager()->getCamera();
-    if (!cam) return; // no camera there
+    float fHeight = -1.0;
+    float fWidth = -1.0;
+    getDimensions(fHeight, fWidth);
 
-    SoType t = getSoRenderManager()->getCamera()->getTypeId();
-    if (t.isDerivedFrom(SoOrthographicCamera::getClassTypeId())) {
-        const SbViewportRegion& vp = getSoRenderManager()->getViewportRegion();
-        const SbVec2s& size = vp.getWindowSize();
-        short dimX, dimY;
-        size.getValue(dimX, dimY);
+    QString dim;
 
-        float fHeight = static_cast<SoOrthographicCamera*>(getSoRenderManager()->getCamera())->height.getValue();
-        float fWidth = fHeight;
-
-        if (dimX > dimY)
-            fWidth *= ((float)dimX)/((float)dimY);
-        else if (dimX < dimY)
-            fHeight *= ((float)dimY)/((float)dimX);
-
+    if (fWidth >= 0.0 && fHeight >= 0.0) {
         // Translate screen units into user's unit schema
         Base::Quantity qWidth(Base::Quantity::MilliMetre);
         Base::Quantity qHeight(Base::Quantity::MilliMetre);
@@ -2499,21 +2392,19 @@ void View3DInventorViewer::printDimension()
         QString hStr = Base::UnitsApi::schemaTranslate(qHeight);
 
         // Create final string and update window
-        QString dim = QString::fromLatin1("%1 x %2")
-                      .arg(wStr, hStr);
-        getMainWindow()->setPaneText(2, dim);
+        dim = QString::fromLatin1("%1 x %2").arg(wStr, hStr);
     }
-    else
-        getMainWindow()->setPaneText(2, QLatin1String(""));
+
+    getMainWindow()->setPaneText(2, dim);
 }
 
 void View3DInventorViewer::selectAll()
 {
     std::vector<App::DocumentObject*> objs;
 
-    for (std::set<ViewProvider*>::iterator it = _ViewProviderSet.begin(); it != _ViewProviderSet.end(); ++it) {
-        if ((*it)->getTypeId().isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
-            ViewProviderDocumentObject* vp = static_cast<ViewProviderDocumentObject*>(*it);
+    for (auto it : _ViewProviderSet) {
+        if (it->getTypeId().isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+            auto vp = static_cast<ViewProviderDocumentObject*>(it);
             App::DocumentObject* obj = vp->getObject();
 
             if (obj) objs.push_back(obj);
@@ -2539,7 +2430,7 @@ bool View3DInventorViewer::processSoEvent(const SoEvent* ev)
 
     if (ev->getTypeId().isDerivedFrom(SoKeyboardEvent::getClassTypeId())) {
         // filter out 'Q' and 'ESC' keys
-        const SoKeyboardEvent* const ke = static_cast<const SoKeyboardEvent*>(ev);
+        const auto ke = static_cast<const SoKeyboardEvent*>(ev);
 
         switch (ke->getKey()) {
         case SoKeyboardEvent::ESCAPE:
@@ -2562,7 +2453,8 @@ SbVec3f View3DInventorViewer::getViewDirection() const
 {
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-    if (!cam) return SbVec3f(0,0,-1);  // this is the default
+    if (!cam)  // this is the default
+        return {0,0,-1};
 
     SbVec3f projDir = cam->getViewVolume().getProjectionDirection();
     return projDir;
@@ -2579,7 +2471,8 @@ SbVec3f View3DInventorViewer::getUpDirection() const
 {
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-    if (!cam) return SbVec3f(0,1,0);
+    if (!cam)
+        return {0,1,0};
 
     SbRotation camrot = cam->orientation.getValue();
     SbVec3f upvec(0, 1, 0); // init to default up vector
@@ -2592,7 +2485,7 @@ SbRotation View3DInventorViewer::getCameraOrientation() const
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
     if (!cam)
-        return SbRotation(0,0,0,1); // this is the default
+        return {0,0,0,1}; // this is the default
 
     return cam->orientation.getValue();
 }
@@ -2620,7 +2513,7 @@ SbVec2f View3DInventorViewer::getNormalizedPosition(const SbVec2s& pnt) const
         pY = (pY - 0.5f*dY) / fRatio + 0.5f*dY;
     }
 
-    return SbVec2f(pX, pY);
+    return {pX, pY};
 }
 
 SbVec3f View3DInventorViewer::getPointOnFocalPlane(const SbVec2s& pnt) const
@@ -2628,7 +2521,8 @@ SbVec3f View3DInventorViewer::getPointOnFocalPlane(const SbVec2s& pnt) const
     SbVec2f pnt2d = getNormalizedPosition(pnt);
     SoCamera* pCam = this->getSoRenderManager()->getCamera();
 
-    if (!pCam) return SbVec3f();  // return invalid point
+    if (!pCam)  // return invalid point
+        return {};
 
     SbViewVolume  vol = pCam->getViewVolume();
 
@@ -2648,7 +2542,7 @@ SbVec3f View3DInventorViewer::getPointOnFocalPlane(const SbVec2s& pnt) const
     return pt;
 }
 
-SbVec2s View3DInventorViewer::getPointOnScreen(const SbVec3f& pnt) const
+SbVec2s View3DInventorViewer::getPointOnViewport(const SbVec3f& pnt) const
 {
     const SbViewportRegion& vp = this->getSoRenderManager()->getViewportRegion();
     float fRatio = vp.getViewportAspectRatio();
@@ -2658,17 +2552,46 @@ SbVec2s View3DInventorViewer::getPointOnScreen(const SbVec3f& pnt) const
     SbVec3f pt(pnt);
     vv.projectToScreen(pt, pt);
 
-    short x = short(std::roundf(pt[0] * sp[0]));
-    short y = short(std::roundf(pt[1] * sp[1]));
+    auto x = short(std::roundf(pt[0] * sp[0]));
+    auto y = short(std::roundf(pt[1] * sp[1]));
 
-    return SbVec2s(x, y);
+    return {x, y};
+}
+
+QPoint View3DInventorViewer::toQPoint(const SbVec2s& pnt) const
+{
+    const SbViewportRegion& vp = this->getSoRenderManager()->getViewportRegion();
+    const SbVec2s& vps = vp.getViewportSizePixels();
+    int xpos = pnt[0];
+    int ypos = vps[1] - pnt[1] - 1;
+
+    qreal dev_pix_ratio = devicePixelRatio();
+    xpos = int(std::roundf(xpos / dev_pix_ratio));
+    ypos = int(std::roundf(ypos / dev_pix_ratio));
+
+    return {xpos, ypos};
+}
+
+SbVec2s View3DInventorViewer::fromQPoint(const QPoint& pnt) const
+{
+    const SbViewportRegion& vp = this->getSoRenderManager()->getViewportRegion();
+    const SbVec2s& vps = vp.getViewportSizePixels();
+    int xpos = pnt.x();
+    int ypos = pnt.y();
+
+    qreal dev_pix_ratio = devicePixelRatio();
+    xpos = int(std::roundf(xpos * dev_pix_ratio));
+    ypos = int(std::roundf(ypos * dev_pix_ratio));
+
+    return SbVec2s(short(xpos), vps[1] - short(ypos) - 1);
 }
 
 void View3DInventorViewer::getNearPlane(SbVec3f& rcPt, SbVec3f& rcNormal) const
 {
     SoCamera* pCam = getSoRenderManager()->getCamera();
 
-    if (!pCam) return;  // just do nothing
+    if (!pCam)  // just do nothing
+        return;
 
     SbViewVolume vol = pCam->getViewVolume();
 
@@ -2686,7 +2609,8 @@ void View3DInventorViewer::getFarPlane(SbVec3f& rcPt, SbVec3f& rcNormal) const
 {
     SoCamera* pCam = getSoRenderManager()->getCamera();
 
-    if (!pCam) return;  // just do nothing
+    if (!pCam)  // just do nothing
+        return;
 
     SbViewVolume vol = pCam->getViewVolume();
 
@@ -2705,7 +2629,8 @@ SbVec3f View3DInventorViewer::projectOnNearPlane(const SbVec2f& pt) const
     SbVec3f pt1, pt2;
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-    if (!cam) return SbVec3f();  // return invalid point
+    if (!cam)  // return invalid point
+        return {};
 
     SbViewVolume vol = cam->getViewVolume();
     vol.projectPointToLine(pt, pt1, pt2);
@@ -2717,7 +2642,8 @@ SbVec3f View3DInventorViewer::projectOnFarPlane(const SbVec2f& pt) const
     SbVec3f pt1, pt2;
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-    if (!cam) return SbVec3f();  // return invalid point
+    if (!cam)  // return invalid point
+        return {};
 
     SbViewVolume vol = cam->getViewVolume();
     vol.projectPointToLine(pt, pt1, pt2);
@@ -2729,7 +2655,8 @@ void View3DInventorViewer::projectPointToLine(const SbVec2s& pt, SbVec3f& pt1, S
     SbVec2f pnt2d = getNormalizedPosition(pt);
     SoCamera* pCam = this->getSoRenderManager()->getCamera();
 
-    if (!pCam) return;
+    if (!pCam)
+        return;
 
     SbViewVolume vol = pCam->getViewVolume();
     vol.projectPointToLine(pnt2d, pt1, pt2);
@@ -2742,7 +2669,7 @@ void View3DInventorViewer::toggleClippingPlane(int toggle, bool beforeEditing,
         if(toggle<=0) {
             pcViewProviderRoot->removeChild(pcClipPlane);
             pcClipPlane->unref();
-            pcClipPlane = 0;
+            pcClipPlane = nullptr;
         }
         return;
     }else if(toggle==0)
@@ -2753,11 +2680,9 @@ void View3DInventorViewer::toggleClippingPlane(int toggle, bool beforeEditing,
     Base::Vector3d base = pla.getPosition();
 
     if(!noManip) {
-        SoClipPlaneManip* clip = new SoClipPlaneManip;
+        auto clip = new SoClipPlaneManip;
         pcClipPlane = clip;
-        SoGetBoundingBoxAction action(this->getSoRenderManager()->getViewportRegion());
-        action.apply(this->getSoRenderManager()->getSceneGraph());
-        SbBox3f box = action.getBoundingBox();
+        SbBox3f box = getBoundingBox();
 
         if (!box.isEmpty()) {
             // adjust to overall bounding box of the scene
@@ -2816,14 +2741,15 @@ SoPickedPoint* View3DInventorViewer::pickPoint(const SbVec2s& pos) const
     // returns a copy of the point
     SoPickedPoint* pick = rp.getPickedPoint();
     //return (pick ? pick->copy() : 0); // needs the same instance of CRT under MS Windows
-    return (pick ? new SoPickedPoint(*pick) : 0);
+    return (pick ? new SoPickedPoint(*pick) : nullptr);
 }
 
 const SoPickedPoint* View3DInventorViewer::getPickedPoint(SoEventCallback* n) const
 {
     if (selectionRoot) {
         auto ret = selectionRoot->getPickedList(n->getAction(), true);
-        if(ret.size()) return ret[0].pp;
+        if(!ret.empty())
+            return ret[0].pp;
         return nullptr;
     }
     return n->getPickedPoint();
@@ -2855,7 +2781,8 @@ void View3DInventorViewer::setCameraType(SoType t)
         // close camera but we don't have this other ugly effect.
         SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-        if(cam == 0) return;
+        if(!cam)
+            return;
 
         static_cast<SoPerspectiveCamera*>(cam)->heightAngle = (float)(M_PI / 4.0);
     }
@@ -2875,11 +2802,9 @@ namespace Gui {
             startPos = camera->position.getValue();
             startRot = camera->orientation.getValue();
         }
-        virtual ~CameraAnimation()
-        {
-        }
+        ~CameraAnimation() override = default;
     protected:
-        void updateCurrentValue(const QVariant & value)
+        void updateCurrentValue(const QVariant & value) override
         {
             int steps = endValue().toInt();
             int curr = value.toInt();
@@ -2896,7 +2821,8 @@ namespace Gui {
 void View3DInventorViewer::moveCameraTo(const SbRotation& rot, const SbVec3f& pos, int steps, int ms)
 {
     SoCamera* cam = this->getSoRenderManager()->getCamera();
-    if (cam == 0) return;
+    if (!cam)
+        return;
 
     CameraAnimation anim(cam, rot, pos);
     anim.setDuration(Base::clamp<int>(ms,0,5000));
@@ -2904,7 +2830,7 @@ void View3DInventorViewer::moveCameraTo(const SbRotation& rot, const SbVec3f& po
     anim.setEndValue(steps);
 
     QEventLoop loop;
-    QObject::connect(&anim, SIGNAL(finished()), &loop, SLOT(quit()));
+    QObject::connect(&anim, &CameraAnimation::finished, &loop, &QEventLoop::quit);
     anim.start();
     loop.exec(QEventLoop::ExcludeUserInputEvents);
 
@@ -2921,13 +2847,9 @@ void View3DInventorViewer::animatedViewAll(int steps, int ms)
     SbVec3f campos = cam->position.getValue();
     SbRotation camrot = cam->orientation.getValue();
     SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
-    SoGetBoundingBoxAction action(vp);
-    action.apply(this->getSoRenderManager()->getSceneGraph());
-    SbBox3f box = action.getBoundingBox();
+    SbBox3f box = getBoundingBox();
 
-#if (COIN_MAJOR_VERSION >= 3)
     float aspectRatio = vp.getViewportAspectRatio();
-#endif
 
     if (box.isEmpty())
         return;
@@ -2937,7 +2859,7 @@ void View3DInventorViewer::animatedViewAll(int steps, int ms)
     if (sphere.getRadius() == 0)
         return;
 
-    SbVec3f direction, pos;
+    SbVec3f direction, pos(0.0f, 0.0f, 0.0f);
     camrot.multVec(SbVec3f(0, 0, -1), direction);
 
     bool isOrthographic = false;
@@ -2947,12 +2869,10 @@ void View3DInventorViewer::animatedViewAll(int steps, int ms)
     if (cam->isOfType(SoOrthographicCamera::getClassTypeId())) {
         isOrthographic = true;
         height = static_cast<SoOrthographicCamera*>(cam)->height.getValue();
-#if (COIN_MAJOR_VERSION >= 3)
         if (aspectRatio < 1.0f)
             diff = sphere.getRadius() * 2 - height * aspectRatio;
         else
-#endif
-        diff = sphere.getRadius() * 2 - height;
+	    diff = sphere.getRadius() * 2 - height;
         pos = (box.getCenter() - direction * sphere.getRadius());
     }
     else if (cam->isOfType(SoPerspectiveCamera::getClassTypeId())) {
@@ -2964,7 +2884,7 @@ void View3DInventorViewer::animatedViewAll(int steps, int ms)
     QEventLoop loop;
     QTimer timer;
     timer.setSingleShot(true);
-    QObject::connect(&timer, SIGNAL(timeout()), &loop, SLOT(quit()));
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
 
     for (int i=0; i<steps; i++) {
         float s = float(i)/float(steps);
@@ -2988,7 +2908,7 @@ extern void oculusStop (void);
 void oculusSetTestScene(View3DInventorRiftViewer *window);
 #endif
 
-void View3DInventorViewer::viewVR(void)
+void View3DInventorViewer::viewVR()
 {
 #if BUILD_VR
     if (oculusUp()) {
@@ -3006,12 +2926,17 @@ void View3DInventorViewer::boxZoom(const SbBox2s& box)
     navigation->boxZoom(box);
 }
 
-void View3DInventorViewer::viewAll()
+SbBox3f View3DInventorViewer::getBoundingBox() const
 {
     SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
     SoGetBoundingBoxAction action(vp);
     action.apply(this->getSoRenderManager()->getSceneGraph());
-    SbBox3f box = action.getBoundingBox();
+    return action.getBoundingBox();
+}
+
+void View3DInventorViewer::viewAll()
+{
+    SbBox3f box = getBoundingBox();
 
     if (box.isEmpty())
         return;
@@ -3032,7 +2957,7 @@ void View3DInventorViewer::viewAll()
 
     for (int i = 0; i < pathlist.getLength(); i++) {
         SoPath* path = pathlist[i];
-        SoSkipBoundingGroup* group = static_cast<SoSkipBoundingGroup*>(path->getTail());
+        auto group = static_cast<SoSkipBoundingGroup*>(path->getTail());
         group->mode = SoSkipBoundingGroup::EXCLUDE_BBOX;
     }
 
@@ -3051,7 +2976,7 @@ void View3DInventorViewer::viewAll()
 
     for (int i = 0; i < pathlist.getLength(); i++) {
         SoPath* path = pathlist[i];
-        SoSkipBoundingGroup* group = static_cast<SoSkipBoundingGroup*>(path->getTail());
+        auto group = static_cast<SoSkipBoundingGroup*>(path->getTail());
         group->mode = SoSkipBoundingGroup::INCLUDE_BBOX;
     }
 }
@@ -3060,9 +2985,11 @@ void View3DInventorViewer::viewAll(float factor)
 {
     SoCamera* cam = this->getSoRenderManager()->getCamera();
 
-    if (!cam) return;
+    if (!cam)
+        return;
 
-    if (factor <= 0.0f) return;
+    if (factor <= 0.0f)
+        return;
 
     if (factor != 1.0f) {
         SoSearchAction sa;
@@ -3073,31 +3000,29 @@ void View3DInventorViewer::viewAll(float factor)
 
         for (int i = 0; i < pathlist.getLength(); i++) {
             SoPath* path = pathlist[i];
-            SoSkipBoundingGroup* group = static_cast<SoSkipBoundingGroup*>(path->getTail());
+            auto group = static_cast<SoSkipBoundingGroup*>(path->getTail());
             group->mode = SoSkipBoundingGroup::EXCLUDE_BBOX;
         }
 
-        SoGetBoundingBoxAction action(this->getSoRenderManager()->getViewportRegion());
-        action.apply(this->getSoRenderManager()->getSceneGraph());
-        SbBox3f box = action.getBoundingBox();
+        SbBox3f box = getBoundingBox();
         float minx,miny,minz,maxx,maxy,maxz;
         box.getBounds(minx,miny,minz,maxx,maxy,maxz);
 
         for (int i = 0; i < pathlist.getLength(); i++) {
             SoPath* path = pathlist[i];
-            SoSkipBoundingGroup* group = static_cast<SoSkipBoundingGroup*>(path->getTail());
+            auto group = static_cast<SoSkipBoundingGroup*>(path->getTail());
             group->mode = SoSkipBoundingGroup::INCLUDE_BBOX;
         }
 
-        SoCube* cube = new SoCube();
+        auto cube = new SoCube();
         cube->width  = factor*(maxx-minx);
         cube->height = factor*(maxy-miny);
         cube->depth  = factor*(maxz-minz);
 
         // fake a scenegraph with the desired bounding size
-        SoSeparator* graph = new SoSeparator();
+        auto graph = new SoSeparator();
         graph->ref();
-        SoTranslation* tr = new SoTranslation();
+        auto tr = new SoTranslation();
         tr->translation.setValue(box.getCenter());
 
         graph->addChild(tr);
@@ -3113,7 +3038,7 @@ void View3DInventorViewer::viewAll(float factor)
 void View3DInventorViewer::viewSelection()
 {
     Base::BoundBox3d bbox;
-    for(auto &sel : Selection().getSelection(0,0)) {
+    for(auto &sel : Selection().getSelection(nullptr, ResolveMode::NoResolve)) {
         auto vp = Application::Instance->getViewProvider(sel.pObject);
         if(!vp)
             continue;
@@ -3178,7 +3103,7 @@ View3DInventorViewer::setAnimationEnabled(const SbBool enable)
 */
 
 SbBool
-View3DInventorViewer::isAnimationEnabled(void) const
+View3DInventorViewer::isAnimationEnabled() const
 {
     return navigation->isAnimationEnabled();
 }
@@ -3187,7 +3112,7 @@ View3DInventorViewer::isAnimationEnabled(void) const
   Query if the model in the viewer is currently in spinning mode after
   a user drag.
 */
-SbBool View3DInventorViewer::isAnimating(void) const
+SbBool View3DInventorViewer::isAnimating() const
 {
     return navigation->isAnimating();
 }
@@ -3201,7 +3126,7 @@ void View3DInventorViewer::startAnimating(const SbVec3f& axis, float velocity)
     navigation->startAnimating(axis, velocity);
 }
 
-void View3DInventorViewer::stopAnimating(void)
+void View3DInventorViewer::stopAnimating()
 {
     navigation->stopAnimating();
 }
@@ -3211,7 +3136,7 @@ void View3DInventorViewer::setPopupMenuEnabled(const SbBool on)
     navigation->setPopupMenuEnabled(on);
 }
 
-SbBool View3DInventorViewer::isPopupMenuEnabled(void) const
+SbBool View3DInventorViewer::isPopupMenuEnabled() const
 {
     return navigation->isPopupMenuEnabled();
 }
@@ -3239,7 +3164,7 @@ View3DInventorViewer::setFeedbackVisibility(const SbBool enable)
 */
 
 SbBool
-View3DInventorViewer::isFeedbackVisible(void) const
+View3DInventorViewer::isFeedbackVisible() const
 {
     return this->axiscrossEnabled;
 }
@@ -3268,7 +3193,7 @@ View3DInventorViewer::setFeedbackSize(const int size)
 */
 
 int
-View3DInventorViewer::getFeedbackSize(void) const
+View3DInventorViewer::getFeedbackSize() const
 {
     return this->axiscrossSize;
 }
@@ -3282,7 +3207,7 @@ void View3DInventorViewer::setCursorEnabled(SbBool /*enable*/)
     this->setCursorRepresentation(navigation->getViewingMode());
 }
 
-void View3DInventorViewer::afterRealizeHook(void)
+void View3DInventorViewer::afterRealizeHook()
 {
     inherited::afterRealizeHook();
     this->setCursorRepresentation(navigation->getViewingMode());
@@ -3301,7 +3226,7 @@ void View3DInventorViewer::setViewing(SbBool enable)
     inherited::setViewing(enable);
 }
 
-void View3DInventorViewer::drawAxisCross(void)
+void View3DInventorViewer::drawAxisCross()
 {
     // FIXME: convert this to a superimposition scenegraph instead of
     // OpenGL calls. 20020603 mortene.
@@ -3324,14 +3249,8 @@ void View3DInventorViewer::drawAxisCross(void)
     // Set the viewport in the OpenGL canvas. Dimensions are calculated
     // as a percentage of the total canvas size.
     SbVec2s view = this->getSoRenderManager()->getSize();
-    const int pixelarea =
-        int(float(this->axiscrossSize)/100.0f * std::min(view[0], view[1]));
-#if 0 // middle of canvas
-    SbVec2s origin(view[0]/2 - pixelarea/2, view[1]/2 - pixelarea/2);
-#endif // middle of canvas
-#if 1 // lower right of canvas
+    const int pixelarea = int(float(this->axiscrossSize)/100.0f * std::min(view[0], view[1]));
     SbVec2s origin(view[0] - pixelarea, 0);
-#endif // lower right of canvas
     glViewport(origin[0], origin[1], pixelarea, pixelarea);
 
     // Set up the projection matrix.
@@ -3367,7 +3286,7 @@ void View3DInventorViewer::drawAxisCross(void)
     // Find unit vector end points.
     SbMatrix px;
     glGetFloatv(GL_PROJECTION_MATRIX, (float*)px);
-    SbMatrix comb = mx.multRight(px);
+    SbMatrix comb = mx.multRight(px); // clazy:exclude=rule-of-two-soft
 
     SbVec3f xpos;
     comb.multVecMatrix(SbVec3f(1,0,0), xpos);
@@ -3409,16 +3328,16 @@ void View3DInventorViewer::drawAxisCross(void)
 
         assert((val[0] >= val[1]) && (val[1] >= val[2])); // Just checking..
 
-        for (int i=0; i < 3; i++) {
+        for (const int & i : idx) {
             glPushMatrix();
 
-            if (idx[i] == XAXIS) {                        // X axis.
+            if (i == XAXIS) {                        // X axis.
                 if (stereoMode() != Quarter::SoQTQuarterAdaptor::MONO)
                     glColor3f(0.500f, 0.5f, 0.5f);
                 else
                     glColor3f(0.500f, 0.125f, 0.125f);
             }
-            else if (idx[i] == YAXIS) {                   // Y axis.
+            else if (i == YAXIS) {                   // Y axis.
                 glRotatef(90, 0, 0, 1);
 
                 if (stereoMode() != Quarter::SoQTQuarterAdaptor::MONO)
@@ -3482,7 +3401,7 @@ void View3DInventorViewer::drawAxisCross(void)
 }
 
 // Draw an arrow for the axis representation directly through OpenGL.
-void View3DInventorViewer::drawArrow(void)
+void View3DInventorViewer::drawArrow()
 {
     glDisable(GL_CULL_FACE);
     glBegin(GL_QUADS);
@@ -3525,6 +3444,39 @@ void View3DInventorViewer::drawArrow(void)
     glVertex3f(1.0f - 1.0f / 3.0f, -0.5f / 4.0f, 0.0f);
     glVertex3f(1.0f - 1.0f / 3.0f, 0.0f, -0.5f / 4.0f);
     glEnd();
+}
+
+void View3DInventorViewer::drawSingleBackground(const QColor& col)
+{
+    // Note: After changing the NaviCube code the content of an image plane may appear black.
+    // A workaround is this function.
+    // See also: https://github.com/FreeCAD/FreeCAD/pull/9356#issuecomment-1529521654
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(-1, 1, -1, 1, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glPushAttrib(GL_ENABLE_BIT);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_TRIANGLE_STRIP);
+    glColor3f(col.redF(), col.greenF(), col.blueF());
+    glVertex2f(-1, 1);
+    glColor3f(col.redF(), col.greenF(), col.blueF());
+    glVertex2f(-1, -1);
+    glColor3f(col.redF(), col.greenF(), col.blueF());
+    glVertex2f(1, 1);
+    glColor3f(col.redF(), col.greenF(), col.blueF());
+    glVertex2f(1, -1);
+    glEnd();
+    glPopAttrib();
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
 
 // ************************************************************************
@@ -3630,7 +3582,9 @@ SoPath* View3DInventorViewer::pickFilterCB(void* viewer, const SoPickedPoint* pp
         std::string e = vp->getElement(pp->getDetail());
         vp->getSelectionShape(e.c_str());
         static char buf[513];
-        snprintf(buf,512,"Hovered: %s (%f,%f,%f)"
+        snprintf(buf,
+                 sizeof(buf),
+                 "Hovered: %s (%f,%f,%f)"
                  ,e.c_str()
                  ,pp->getPoint()[0]
                  ,pp->getPoint()[1]
@@ -3654,46 +3608,29 @@ void View3DInventorViewer::removeEventCallback(SoType eventtype, SoEventCallback
 
 ViewProvider* View3DInventorViewer::getViewProviderByPath(SoPath* path) const
 {
-    for (int i = 0; i < path->getLength(); i++) {
-        SoNode* node = path->getNode(i);
-
-        if (node->isOfType(SoSeparator::getClassTypeId())) {
-            auto it = _ViewProviderMap.find(static_cast<SoSeparator*>(node));
-            if (it != _ViewProviderMap.end()) {
-                return it->second;
-            }
-        }
+    if (!guiDocument) {
+        Base::Console().Warning("View3DInventorViewer::getViewProviderByPath: No document set\n");
+        return nullptr;
     }
-    return 0;
+    return guiDocument->getViewProviderByPathFromHead(path);
 }
 
 ViewProvider* View3DInventorViewer::getViewProviderByPathFromTail(SoPath* path) const
 {
-    // Make sure I'm the lowest LocHL in the pick path!
-    for (int i = 0; i < path->getLength(); i++) {
-        SoNode* node = path->getNodeFromTail(i);
-
-        if (node->isOfType(SoSeparator::getClassTypeId())) {
-            std::map<SoSeparator*,ViewProvider*>::const_iterator it = _ViewProviderMap.find(static_cast<SoSeparator*>(node));
-            if (it != _ViewProviderMap.end()) {
-                return it->second;
-            }
-        }
+    if (!guiDocument) {
+        Base::Console().Warning("View3DInventorViewer::getViewProviderByPathFromTail: No document set\n");
+        return nullptr;
     }
-
-    return 0;
+    return guiDocument->getViewProviderByPathFromTail(path);
 }
 
 std::vector<ViewProvider*> View3DInventorViewer::getViewProvidersOfType(const Base::Type& typeId) const
 {
-    std::vector<ViewProvider*> views;
-    for (std::set<ViewProvider*>::const_iterator it = _ViewProviderSet.begin(); it != _ViewProviderSet.end(); ++it) {
-        if ((*it)->getTypeId().isDerivedFrom(typeId)) {
-            views.push_back(*it);
-        }
+    if (!guiDocument) {
+        Base::Console().Warning("View3DInventorViewer::getViewProvidersOfType: No document set\n");
+        return {};
     }
-
-    return views;
+    return guiDocument->getViewProvidersOfType(typeId);
 }
 
 void View3DInventorViewer::turnAllDimensionsOn()
@@ -3742,7 +3679,7 @@ void View3DInventorViewer::turnDeltaDimensionsOff()
     static_cast<SoSwitch*>(dimensionRoot->getChild(1))->whichChild = SO_SWITCH_NONE;
 }
 
-PyObject *View3DInventorViewer::getPyObject(void)
+PyObject *View3DInventorViewer::getPyObject()
 {
     if (!_viewerPy)
         _viewerPy = new View3DInventorViewerPy(this);
@@ -3793,3 +3730,4 @@ void View3DInventorViewer::dragLeaveEvent(QDragLeaveEvent *e)
     inherited::dragLeaveEvent(e);
 }
 
+#include "moc_View3DInventorViewer.cpp"

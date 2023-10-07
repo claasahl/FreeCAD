@@ -23,10 +23,6 @@
 
 #include "PreCompiled.h"
 
-#ifndef _PreComp_
-# include <qobject.h>
-#endif
-
 #include "Workbench.h"
 #include <Gui/MenuManager.h>
 #include <Gui/ToolBarManager.h>
@@ -44,18 +40,16 @@ using namespace PartGui;
     qApp->translate("Workbench", "Join");
     qApp->translate("Workbench", "Split");
     qApp->translate("Workbench", "Compound");
+    qApp->translate("Workbench", "Create a copy");
+    qApp->translate("Workbench", "Measure");
 #endif
 
 /// @namespace PartGui @class Workbench
 TYPESYSTEM_SOURCE(PartGui::Workbench, Gui::StdWorkbench)
 
-Workbench::Workbench()
-{
-}
+Workbench::Workbench() = default;
 
-Workbench::~Workbench()
-{
-}
+Workbench::~Workbench() = default;
 
 Gui::MenuItem* Workbench::setupMenuBar() const
 {
@@ -130,6 +124,7 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "Part_Extrude"
           << "Part_Revolve"
           << "Part_Mirror"
+          << "Part_Scale"
           << "Part_Fillet"
           << "Part_Chamfer"
           << "Part_MakeFace"
@@ -189,6 +184,7 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     *tool << "Part_Extrude"
           << "Part_Revolve"
           << "Part_Mirror"
+          << "Part_Scale"
           << "Part_Fillet"
           << "Part_Chamfer"
           << "Part_MakeFace"

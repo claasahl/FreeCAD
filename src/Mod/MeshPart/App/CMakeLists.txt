@@ -1,9 +1,3 @@
-if(MSVC)
-    add_definitions(-DFCAppMeshPart -DHAVE_ACOSH -DHAVE_ASINH -DHAVE_ATANH)
-else(MSVC)
-    add_definitions(-DHAVE_LIMITS_H -DHAVE_CONFIG_H)
-endif(MSVC)
-
 if (BUILD_SMESH)
     add_definitions(-DHAVE_SMESH -DHAVE_MEFISTO)
 endif(BUILD_SMESH)
@@ -19,7 +13,6 @@ include_directories(
     ${OCC_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIR}
     ${PYTHON_INCLUDE_DIRS}
-    ${XercesC_INCLUDE_DIRS}
     ${SMESH_INCLUDE_DIR}
     ${VTK_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
@@ -62,14 +55,23 @@ set(MeshPart_Scripts
     ../Init.py
 )
 
+if(FREECAD_USE_PCH)
+    add_definitions(-D_PreComp_)
+    GET_MSVC_PRECOMPILED_SOURCE("PreCompiled.cpp" PCH_SRCS ${MeshPart_SRCS})
+    ADD_MSVC_PRECOMPILED_HEADER(MeshPart PreCompiled.h PreCompiled.cpp PCH_SRCS)
+endif(FREECAD_USE_PCH)
+
+# Suppress -Wundefined-var-template
+if (MINGW AND CMAKE_COMPILER_IS_CLANGXX)
+    unset(_flag_found CACHE)
+    check_cxx_compiler_flag("-Wno-undefined-var-template" _flag_found)
+    if (_flag_found)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-undefined-var-template")
+    endif()
+endif()
+
 add_library(MeshPart SHARED ${MeshPart_SRCS} ${MeshPart_Scripts})
 target_link_libraries(MeshPart ${MeshPart_LIBS})
-
-# external SMESH doesn't support C++17 yet
-if(FREECAD_USE_EXTERNAL_SMESH)
-    set_target_properties(MeshPart PROPERTIES CXX_STANDARD_REQUIRED ON)
-    set_target_properties(MeshPart PROPERTIES CXX_STANDARD 14)
-endif()
 
 
 fc_target_copy_resource_flat(MeshPart

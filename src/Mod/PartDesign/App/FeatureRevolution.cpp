@@ -23,28 +23,20 @@
 
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <BRep_Builder.hxx>
-# include <BRepBndLib.hxx>
-# include <BRepPrimAPI_MakeRevol.hxx>
-# include <BRepBuilderAPI_MakeFace.hxx>
-# include <TopoDS.hxx>
-# include <TopoDS_Face.hxx>
-# include <TopoDS_Wire.hxx>
-# include <TopExp_Explorer.hxx>
 # include <BRepAlgoAPI_Fuse.hxx>
-# include <Precision.hxx>
+# include <BRepPrimAPI_MakeRevol.hxx>
 # include <gp_Lin.hxx>
+# include <Precision.hxx>
+# include <TopExp_Explorer.hxx>
+# include <TopoDS.hxx>
 #endif
 
 #include <Base/Axis.h>
-#include <Base/Console.h>
 #include <Base/Exception.h>
 #include <Base/Placement.h>
 #include <Base/Tools.h>
 
-#include <Mod/Part/App/TopoShape.h>
 #include "FeatureRevolution.h"
-
 
 using namespace PartDesign;
 
@@ -58,12 +50,12 @@ const App::PropertyAngle::Constraints Revolution::floatAngle = { Base::toDegrees
 Revolution::Revolution()
 {
     addSubType = FeatureAddSub::Additive;
-    
+
     ADD_PROPERTY_TYPE(Base,(Base::Vector3d(0.0,0.0,0.0)),"Revolution", App::Prop_ReadOnly, "Base");
     ADD_PROPERTY_TYPE(Axis,(Base::Vector3d(0.0,1.0,0.0)),"Revolution", App::Prop_ReadOnly, "Axis");
     ADD_PROPERTY_TYPE(Angle,(360.0),"Revolution", App::Prop_None, "Angle");
     Angle.setConstraints(&floatAngle);
-    ADD_PROPERTY_TYPE(ReferenceAxis,(0),"Revolution",(App::Prop_None),"Reference axis of revolution");
+    ADD_PROPERTY_TYPE(ReferenceAxis,(nullptr),"Revolution",(App::Prop_None),"Reference axis of revolution");
 }
 
 short Revolution::mustExecute() const
@@ -77,16 +69,16 @@ short Revolution::mustExecute() const
     return ProfileBased::mustExecute();
 }
 
-App::DocumentObjectExecReturn *Revolution::execute(void)
+App::DocumentObjectExecReturn *Revolution::execute()
 {
     // Validate parameters
     double angle = Angle.getValue();
     if (angle > 360.0)
-        return new App::DocumentObjectExecReturn("Angle of revolution too large");
+        return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Angle of revolution too large"));
 
     angle = Base::toRadians<double>(angle);
     if (angle < Precision::Angular())
-        return new App::DocumentObjectExecReturn("Angle of revolution too small");
+        return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Angle of revolution too small"));
 
     // Reverse angle if selected
     if (Reversed.getValue() && !Midplane.getValue())
@@ -123,7 +115,7 @@ App::DocumentObjectExecReturn *Revolution::execute(void)
 
     try {
         if (sketchshape.IsNull())
-            return new App::DocumentObjectExecReturn("Creating a face from sketch failed");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Creating a face from sketch failed"));
 
         // Rotate the face by half the angle to get Revolution symmetric to sketch plane
         if (Midplane.getValue()) {
@@ -145,8 +137,8 @@ App::DocumentObjectExecReturn *Revolution::execute(void)
         xp.Init(sketchshape, TopAbs_FACE);
         for (;xp.More(); xp.Next()) {
             if (checkLineCrossesFace(gp_Lin(pnt, dir), TopoDS::Face(xp.Current())))
-                return new App::DocumentObjectExecReturn("Revolve axis intersects the sketch");
-        }        
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Revolve axis intersects the sketch"));
+        }
 
         // revolve the face to a solid
         BRepPrimAPI_MakeRevol RevolMaker(sketchshape, gp_Ax1(pnt, dir), angle);
@@ -155,14 +147,14 @@ App::DocumentObjectExecReturn *Revolution::execute(void)
             TopoDS_Shape result = RevolMaker.Shape();
             result = refineShapeIfActive(result);
             // set the additive shape property for later usage in e.g. pattern
-            this->AddSubShape.setValue(result);            
+            this->AddSubShape.setValue(result);
 
             if (!base.IsNull()) {
                 // Let's call algorithm computing a fuse operation:
                 BRepAlgoAPI_Fuse mkFuse(base, result);
                 // Let's check if the fusion has been successful
                 if (!mkFuse.IsDone())
-                    throw Part::BooleanException("Fusion with base feature failed");
+                    throw Part::BooleanException(QT_TRANSLATE_NOOP("Exception", "Fusion with base feature failed"));
                 result = mkFuse.Shape();
                 result = refineShapeIfActive(result);
             }
@@ -170,15 +162,15 @@ App::DocumentObjectExecReturn *Revolution::execute(void)
             this->Shape.setValue(getSolid(result));
         }
         else
-            return new App::DocumentObjectExecReturn("Could not revolve the sketch!");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Could not revolve the sketch!"));
 
         return App::DocumentObject::StdReturn;
     }
     catch (Standard_Failure& e) {
 
         if (std::string(e.GetMessageString()) == "TopoDS::Face")
-            return new App::DocumentObjectExecReturn("Could not create face from sketch.\n"
-                "Intersecting sketch entities in a sketch are not allowed.");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Could not create face from sketch.\n"
+                "Intersecting sketch entities in a sketch are not allowed."));
         else
             return new App::DocumentObjectExecReturn(e.GetMessageString());
     }
@@ -187,7 +179,7 @@ App::DocumentObjectExecReturn *Revolution::execute(void)
     }
 }
 
-bool Revolution::suggestReversed(void)
+bool Revolution::suggestReversed()
 {
     try {
         updateAxis();
@@ -198,7 +190,7 @@ bool Revolution::suggestReversed(void)
     return ProfileBased::getReversedAngle(Base.getValue(), Axis.getValue()) < 0.0;
 }
 
-void Revolution::updateAxis(void)
+void Revolution::updateAxis()
 {
     App::DocumentObject *pcReferenceAxis = ReferenceAxis.getValue();
     const std::vector<std::string> &subReferenceAxis = ReferenceAxis.getSubValues();

@@ -20,17 +20,11 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
-#ifndef _PreComp_
-# include <QCoreApplication>
-# include <QTextStream>
-#endif
 
 #include <Gui/Application.h>
 #include <Gui/Command.h>
-#include <Gui/MainWindow.h>
-#include <Gui/FileDialog.h>
+
 #include "Workbench.h"
 
 
@@ -39,15 +33,15 @@ using namespace std;
 DEF_STD_CMD(CmdStartPage)
 
 CmdStartPage::CmdStartPage()
-	:Command("Start_StartPage")
+    : Command("Start_StartPage")
 {
-    sAppModule      = "Start";
-    sGroup          = QT_TR_NOOP("Start");
-    sMenuText       = QT_TR_NOOP("Start Page");
-    sToolTipText    = QT_TR_NOOP("Displays the start page in a browser view");
-    sWhatsThis      = "Start_StartPage";
-    sStatusTip      = sToolTipText;
-    sPixmap         = "StartWorkbench";
+    sAppModule = "Start";
+    sGroup = QT_TR_NOOP("Start");
+    sMenuText = QT_TR_NOOP("Start Page");
+    sToolTipText = QT_TR_NOOP("Displays the start page in a browser view");
+    sWhatsThis = "Start_StartPage";
+    sStatusTip = sToolTipText;
+    sPixmap = "StartWorkbench";
 }
 
 void CmdStartPage::activated(int iMsg)
@@ -57,9 +51,9 @@ void CmdStartPage::activated(int iMsg)
 }
 
 
-void CreateStartCommands(void)
+void CreateStartCommands()
 {
-    Gui::CommandManager &rcCmdMgr = Gui::Application::Instance->commandManager();
+    Gui::CommandManager& rcCmdMgr = Gui::Application::Instance->commandManager();
 
     rcCmdMgr.addCommand(new CmdStartPage());
- }
+}

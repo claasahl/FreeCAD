@@ -21,14 +21,20 @@
 
 import os
 
-import FreeCAD,Draft,ArchComponent,DraftVecUtils,ArchCommands
+import FreeCAD
+import ArchCommands
+import ArchComponent
+import Draft
+import DraftVecUtils
 import ArchWindowPresets
 from FreeCAD import Units
 from FreeCAD import Vector
+from draftutils.messages import _wrn
+
 if FreeCAD.GuiUp:
     import FreeCADGui
     from PySide import QtCore, QtGui, QtSvg
-    from DraftTools import translate
+    from draftutils.translate import translate
     from PySide.QtCore import QT_TRANSLATE_NOOP
     import draftguitools.gui_trackers as DraftTrackers
 else:
@@ -50,7 +56,7 @@ else:
 
 __title__  = "FreeCAD Window"
 __author__ = "Yorik van Havre"
-__url__    = "https://www.freecadweb.org"
+__url__    = "https://www.freecad.org"
 
 # presets
 WindowPartTypes = ["Frame","Solid panel","Glass panel","Louvre"]
@@ -94,7 +100,11 @@ def makeWindow(baseobj=None,width=None,height=None,parts=None,name=None):
     else:
         if baseobj:
             if baseobj.getLinkedObject().isDerivedFrom("Part::Part2DObject"):
+                # create default component
                 if baseobj.Shape.Wires:
+                    tp = "Frame"
+                    if len(baseobj.Shape.Wires) == 1:
+                        tp = "Solid panel"
                     i = 0
                     ws = ''
                     for w in baseobj.Shape.Wires:
@@ -102,7 +112,7 @@ def makeWindow(baseobj=None,width=None,height=None,parts=None,name=None):
                             if ws: ws += ","
                             ws += "Wire" + str(i)
                             i += 1
-                    obj.WindowParts = ["Default","Frame",ws,"1","0"]
+                    obj.WindowParts = ["Default",tp,ws,"1","0"]
             else:
                 # bind properties from base obj if existing
                 for prop in ["Height","Width","Subvolume","Tag","Description","Material"]:
@@ -237,6 +247,20 @@ class _CommandWindow:
         FreeCADGui.Snapper.getPoint(callback=self.getPoint,movecallback=self.update,extradlg=self.taskbox())
         #FreeCADGui.Snapper.setSelectMode(True)
 
+    def has_width_and_height_constraint(self, sketch):
+        width_found = False
+        height_found = False
+
+        for constr in sketch.Constraints:
+            if constr.Name == "Width":
+                width_found = True
+            elif constr.Name == "Height":
+                height_found = True
+            elif width_found and height_found:
+                break
+
+        return (width_found and height_found)
+
     def getPoint(self,point=None,obj=None):
 
         "this function is called by the snapper when it has a 3D point"
@@ -249,47 +273,64 @@ class _CommandWindow:
             obj = self.sel[0]
         point = point.add(FreeCAD.Vector(0,0,self.Sill))
         FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Window"))
+
+        FreeCADGui.doCommand("import math, FreeCAD, Arch, DraftGeomUtils")
+        FreeCADGui.doCommand("wp = FreeCAD.DraftWorkingPlane")
+
+        if self.baseFace is not None:
+            FreeCADGui.doCommand("face = FreeCAD.ActiveDocument." + self.baseFace[0].Name + ".Shape.Faces[" + str(self.baseFace[1]) + "]")
+            FreeCADGui.doCommand("pl = DraftGeomUtils.placement_from_face(face, vec_z = wp.axis)")
+        else:
+            FreeCADGui.doCommand("pl = FreeCAD.Placement()")
+            FreeCADGui.doCommand("pl.Rotation = FreeCAD.Rotation(wp.u, wp.axis, -wp.v, 'XZY')")
+
+        FreeCADGui.doCommand("pl.Base = FreeCAD.Vector(" + str(point.x) + ", " + str(point.y) + ", " + str(point.z) + ")")
+
         if self.Preset >= len(WindowPresets):
             # library object
-            col = list(FreeCAD.ActiveDocument.Objects)
-            path = self.librarypresets[self.Preset-len(WindowPresets)][1]
-            FreeCADGui.doCommand("FreeCADGui.ActiveDocument.mergeProject('"+path+"')")
+            col = FreeCAD.ActiveDocument.Objects
+            path = self.librarypresets[self.Preset - len(WindowPresets)][1]
+            FreeCADGui.doCommand("FreeCADGui.ActiveDocument.mergeProject('" + path + "')")
             # find the latest added window
-            nol = list(FreeCAD.ActiveDocument.Objects)
-            nol.reverse()
-            for o in nol:
-                if (Draft.getType(o) == "Window") and (not o in col):
-                    lastobj = o
-                    FreeCADGui.doCommand("FreeCAD.ActiveDocument.getObject('"+o.Name+"').Placement.Base = FreeCAD.Vector(" + str(point.x) + "," + str(point.y) + ","+ str(point.z) + ")")
-                    FreeCADGui.doCommand("FreeCAD.ActiveDocument.getObject('"+o.Name+"').Width = "+str(self.Width))
-                    FreeCADGui.doCommand("FreeCAD.ActiveDocument.getObject('"+o.Name+"').Height = "+str(self.Height))
+            nol = FreeCAD.ActiveDocument.Objects
+            for o in nol[len(col):]:
+                if Draft.getType(o) == "Window":
+                    if Draft.getType(o.Base) != "Sketcher::SketchObject":
+                        _wrn(translate("Arch", "Window not based on sketch. Window not aligned or resized."))
+                        self.Include = False
+                        break
+                    FreeCADGui.doCommand("win = FreeCAD.ActiveDocument.getObject('" + o.Name + "')")
+                    FreeCADGui.doCommand("win.Base.Placement = pl")
+                    FreeCADGui.doCommand("win.Normal = pl.Rotation.multVec(FreeCAD.Vector(0, 0, -1))")
+                    FreeCADGui.doCommand("win.Width = " + str(self.Width))
+                    FreeCADGui.doCommand("win.Height = " + str(self.Height))
+                    FreeCADGui.doCommand("win.Base.recompute()")
+                    if not self.has_width_and_height_constraint(o.Base):
+                        _wrn(translate("Arch", "No Width and/or Height constraint in window sketch. Window not resized."))
                     break
+            else:
+                _wrn(translate("Arch", "No window found. Cannot continue."))
+                self.Include = False
 
         else:
             # preset
-            FreeCADGui.doCommand("import math,FreeCAD,Arch,WorkingPlane")
-            if self.baseFace != None:
-                FreeCADGui.doCommand("pl = WorkingPlane.getPlacementFromFace(FreeCAD.ActiveDocument." + self.baseFace[0].Name + ".Shape.Faces[" + str(self.baseFace[1]) + "])")
-            else:
-                FreeCADGui.doCommand("m = FreeCAD.Matrix()")
-                FreeCADGui.doCommand("m.rotateX(math.pi/2)")
-                FreeCADGui.doCommand("pl = FreeCAD.Placement(m)")
-            FreeCADGui.doCommand("pl.Base = FreeCAD.Vector(" + str(point.x) + "," + str(point.y) + ","+ str(point.z) + ")")
             wp = ""
             for p in self.wparams:
-                wp += p.lower() + "=" + str(getattr(self,p)) + ","
-            FreeCADGui.doCommand("win = Arch.makeWindowPreset(\"" + WindowPresets[self.Preset] + "\"," + wp + "placement=pl)")
-            if self.Include:
-                host = None
-                if self.baseFace != None:
-                    host = self.baseFace[0]
-                elif obj:
-                    host = obj
-                if Draft.getType(host) in AllowedHosts:
-                    FreeCADGui.doCommand("win.Hosts = [FreeCAD.ActiveDocument."+host.Name+"]")
-                    siblings = host.Proxy.getSiblings(host)
-                    for sibling in siblings:
-                        FreeCADGui.doCommand("win.Hosts = win.Hosts+[FreeCAD.ActiveDocument."+sibling.Name+"]")
+                wp += p.lower() + "=" + str(getattr(self,p)) + ", "
+            FreeCADGui.doCommand("win = Arch.makeWindowPreset('" + WindowPresets[self.Preset] + "', " + wp + "placement=pl)")
+
+        if self.Include:
+            host = None
+            if self.baseFace is not None:
+                host = self.baseFace[0]
+            elif obj:
+                host = obj
+            if Draft.getType(host) in AllowedHosts:
+                FreeCADGui.doCommand("win.Hosts = [FreeCAD.ActiveDocument." + host.Name + "]")
+                siblings = host.Proxy.getSiblings(host)
+                for sibling in siblings:
+                    FreeCADGui.doCommand("win.Hosts = win.Hosts + [FreeCAD.ActiveDocument." + sibling.Name + "]")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         return
@@ -300,23 +341,25 @@ class _CommandWindow:
 
         delta = FreeCAD.Vector(self.Width/2,self.Thickness/2,self.Height/2)
         delta = delta.add(FreeCAD.Vector(0,0,self.Sill))
-        rot = FreeCAD.Rotation()
+
+        wp = FreeCAD.DraftWorkingPlane
+        if self.baseFace is None:
+            rot = FreeCAD.Rotation(wp.u,wp.v,-wp.axis,"XZY")
+            self.tracker.setRotation(rot)
         if info:
             if "Face" in info['Component']:
-                import WorkingPlane
+                import DraftGeomUtils
                 o = FreeCAD.ActiveDocument.getObject(info['Object'])
                 self.baseFace = [o,int(info['Component'][4:])-1]
                 #print("switching to ",o.Label," face ",self.baseFace[1])
                 f = o.Shape.Faces[self.baseFace[1]]
-                p = WorkingPlane.getPlacementFromFace(f,rotated=True)
-                if p:
-                    rot = p.Rotation
-                    self.tracker.setRotation(rot)
+                p = DraftGeomUtils.placement_from_face(f,vec_z=wp.axis,rotated=True)
+                rot = p.Rotation
+                self.tracker.setRotation(rot)
         r = self.tracker.trans.rotation.getValue().getValue()
         if r != (0,0,0,1):
             delta = FreeCAD.Rotation(r[0],r[1],r[2],r[3]).multVec(FreeCAD.Vector(delta.x,-delta.y,-delta.z))
         self.tracker.pos(point.add(delta))
-        #self.tracker.setRotation(rot)
 
     def taskbox(self):
 
@@ -340,31 +383,29 @@ class _CommandWindow:
         grid.addWidget(values,1,1,1,1)
         QtCore.QObject.connect(values,QtCore.SIGNAL("valueChanged(double)"),self.setSill)
 
-        # check for Parts library
-        self.librarypresets = []
-        librarypath = FreeCAD.ParamGet('User parameter:Plugins/parts_library').GetString('destination','')
-        if librarypath:
-            if os.path.exists(librarypath):
-                for wtype in ["Windows","Doors"]:
-                    wdir = os.path.join(librarypath,"Architectural Parts",wtype)
-                    if os.path.exists(wdir):
-                        for subtype in os.listdir(wdir):
-                            subdir = os.path.join(wdir,subtype)
-                            if os.path.exists(subdir):
-                                for subfile in os.listdir(subdir):
-                                    if subfile.lower().endswith(".fcstd"):
-                                        self.librarypresets.append([wtype+" - "+subtype+" - "+os.path.splitext(subfile)[0],os.path.join(subdir,subfile)])
-            else:
-                librarypath = None
-        # check for existing presets
-        presetdir = os.path.join(FreeCAD.getUserAppDataDir(),"Arch")
-        for tp in ["Windows","Doors"]:
-            wdir = os.path.join(presetdir,tp)
-            if os.path.exists(wdir):
-                for wfile in os.listdir(wdir):
-                    if wfile.lower().endswith(".fcstd"):
-                        self.librarypresets.append([tp[:-1]+" - "+wfile[:-6],wfile])
+        # check for Parts library and Arch presets
 
+        # because of the use of FreeCADGui.doCommand() backslashes in the
+        # paths in librarypresets need to be double escaped "\\\\", so let's
+        # use forward slashes instead...
+        self.librarypresets = []
+        librarypath = FreeCAD.ParamGet("User parameter:Plugins/parts_library").GetString("destination", "")
+        # librarypath should have only forward slashes already, but let's use replace() anyway just to be sure:
+        librarypath = librarypath.replace("\\", "/") + "/Architectural Parts"
+        presetdir = FreeCAD.getUserAppDataDir().replace("\\", "/") + "/Arch"
+        for path in [librarypath, presetdir]:
+            if os.path.isdir(path):
+                for wtype in ["Windows", "Doors"]:
+                    wdir = path + "/" + wtype
+                    if os.path.isdir(wdir):
+                        for subtype in os.listdir(wdir):
+                            subdir = wdir + "/" + subtype
+                            if os.path.isdir(subdir):
+                                for subfile in os.listdir(subdir):
+                                    if (os.path.isfile(subdir + "/" + subfile)
+                                            and subfile.lower().endswith(".fcstd")):
+                                        self.librarypresets.append([wtype + " - " + subtype + " - " + subfile[:-6],
+                                                                    subdir + "/" + subfile])
 
         # presets box
         labelp = QtGui.QLabel(translate("Arch","Preset"))
@@ -490,17 +531,18 @@ class _CommandWindow:
                     path = self.librarypresets[i-len(WindowPresets)][1]
                     if path.lower().endswith(".fcstd"):
                         try:
-                            import zipfile,tempfile
+                            import tempfile
+                            import zipfile
                         except Exception:
                             pass
                         else:
-                            zfile=zipfile.ZipFile(path)
-                            files=zfile.namelist()
+                            zfile = zipfile.ZipFile(path)
+                            files = zfile.namelist()
                             # check for meta-file if it's really a FreeCAD document
                             if files[0] == "Document.xml":
                                 image="thumbnails/Thumbnail.png"
                                 if image in files:
-                                    image=zfile.read(image)
+                                    image = zfile.read(image)
                                     thumbfile = tempfile.mkstemp(suffix='.png')[1]
                                     thumb = open(thumbfile,"wb")
                                     thumb.write(image)
@@ -535,7 +577,7 @@ class _Window(ArchComponent.Component):
         self.addSketchArchFeatures(obj)
 
     def addSketchArchFeatures(self,obj,linkObj=None,mode=None):
-        ''' 
+        '''
            To add features in the SketchArch External Add-on  (https://github.com/paullee0/FreeCAD_SketchArch)
            -  import ArchSketchObject module, and
            -  set properties that are common to ArchObjects (including Links) and ArchSketch
@@ -617,8 +659,8 @@ class _Window(ArchComponent.Component):
                 if hasattr(self,prop):
                     if getattr(self,prop) != getattr(obj,prop):
                         touchhosts = True
-                if touchhosts and hasattr(obj,"Hosts"):
-                    for host in obj.Hosts:
+                if touchhosts and hasattr(self, "Hosts") and hasattr(obj, "Hosts"):
+                    for host in set(self.Hosts + obj.Hosts): # use set to remove duplicates
                         # mark host to recompute so it can detect this object
                         host.touch()
             if prop in ["Width","Height","Frame"]:
@@ -633,7 +675,9 @@ class _Window(ArchComponent.Component):
 
     def buildShapes(self,obj):
 
-        import Part,DraftGeomUtils,math
+        import Part
+        import DraftGeomUtils
+        import math
         self.sshapes = []
         self.vshapes = []
         shapes = []
@@ -777,6 +821,8 @@ class _Window(ArchComponent.Component):
                             pass
                         elif omode == 10: # -sliding
                             pass
+                exv = FreeCAD.Vector()
+                zov = FreeCAD.Vector()
                 V = 0
                 thk = obj.WindowParts[(i*5)+3]
                 if "+V" in thk:
@@ -800,12 +846,19 @@ class _Window(ArchComponent.Component):
                     if zof:
                         zov = DraftVecUtils.scaleTo(norm,zof)
                         shape.translate(zov)
-                        for symb in ssymbols:
-                            symb.translate(zov)
-                        for symb in vsymbols:
-                            symb.translate(zov)
-                        if rotdata and hinge and omode:
-                            rotdata[0] = rotdata[0].add(zov)
+                if hinge and omode and 0 < omode < 9:
+                    if DraftVecUtils.angle(chord, norm, enorm) < 0:
+                        if omode%2 == 0:
+                            zov = zov.add(exv)
+                    else:
+                        if omode%2 == 1:
+                            zov = zov.add(exv)
+                    for symb in ssymbols:
+                        symb.translate(zov)
+                    for symb in vsymbols:
+                        symb.translate(zov)
+                    if rotdata:
+                        rotdata[0] = rotdata[0].add(zov)
                 if obj.WindowParts[(i*5)+1] == "Louvre":
                     if hasattr(obj,"LouvreWidth"):
                         if obj.LouvreWidth and obj.LouvreSpacing:
@@ -843,7 +896,9 @@ class _Window(ArchComponent.Component):
                 self.boxes = clonedProxy.boxes
             return
 
-        import Part,DraftGeomUtils,math
+        import Part
+        import DraftGeomUtils
+        import math
         pl = obj.Placement
         base = None
         self.sshapes = []
@@ -891,7 +946,7 @@ class _Window(ArchComponent.Component):
         self.executeSketchArchFeatures(obj)
 
     def executeSketchArchFeatures(self, obj, linkObj=None, index=None, linkElement=None):
-        ''' 
+        '''
            To execute features in the SketchArch External Add-on  (https://github.com/paullee0/FreeCAD_SketchArch)
            -  import ArchSketchObject module, and
            -  execute features that are common to ArchObjects (including Links) and ArchSketch
@@ -903,7 +958,7 @@ class _Window(ArchComponent.Component):
         try:
             import ArchSketchObject  # Why needed ? Should have try: addSketchArchFeatures() before !  Need 'per method' ?
             # Execute SketchArch Feature - Intuitive Automatic Placement for Arch Windows/Doors, Equipment etc.
-            # see https://forum.freecadweb.org/viewtopic.php?f=23&t=50802
+            # see https://forum.freecad.org/viewtopic.php?f=23&t=50802
             ArchSketchObject.updateAttachmentOffset(obj, linkObj)
         except:
             pass
@@ -911,7 +966,7 @@ class _Window(ArchComponent.Component):
     def appLinkExecute(self, obj, linkObj, index, linkElement):
         '''
             Default Link Execute method() -
-            See https://forum.freecadweb.org/viewtopic.php?f=22&t=42184&start=10#p361124
+            See https://forum.freecad.org/viewtopic.php?f=22&t=42184&start=10#p361124
             @realthunder added support to Links to run Linked Scripted Object's methods()
         '''
 
@@ -1080,29 +1135,6 @@ class _ViewProviderWindow(ArchComponent.ViewProviderComponent):
             self.colorize(vobj.Object,force=True)
         ArchComponent.ViewProviderComponent.onChanged(self,vobj,prop)
 
-    def setEdit(self,vobj,mode):
-
-        taskd = _ArchWindowTaskPanel()
-        taskd.obj = self.Object
-        self.sets = [vobj.DisplayMode,vobj.Transparency]
-        vobj.DisplayMode = "Shaded"
-        vobj.Transparency = 80
-        if self.Object.Base:
-            self.Object.Base.ViewObject.show()
-        taskd.update()
-        FreeCADGui.Control.showDialog(taskd)
-        return True
-
-    def unsetEdit(self,vobj,mode):
-
-        vobj.DisplayMode = self.sets[0]
-        vobj.Transparency = self.sets[1]
-        vobj.DiffuseColor = vobj.DiffuseColor # reset face colors
-        if self.Object.Base:
-            self.Object.Base.ViewObject.hide()
-        FreeCADGui.Control.closeDialog()
-        return
-
     def colorize(self,obj,force=False):
 
         "setting different part colors"
@@ -1177,17 +1209,74 @@ class _ViewProviderWindow(ArchComponent.ViewProviderComponent):
                                 ccol = (ccol[0],ccol[1],ccol[2],t)
         return ccol
 
-    def setupContextMenu(self,vobj,menu):
+    def getHingeEdgeIndices(self):
 
-        if hasattr(self,"Object"):
-            from PySide import QtCore,QtGui
-            import Draft_rc
-            action1 = QtGui.QAction(QtGui.QIcon(":/icons/Arch_Window_Tree.svg"),"Invert opening direction",menu)
-            QtCore.QObject.connect(action1,QtCore.SIGNAL("triggered()"),self.invertOpening)
-            menu.addAction(action1)
-            action2 = QtGui.QAction(QtGui.QIcon(":/icons/Arch_Window_Tree.svg"),"Invert hinge position",menu)
-            QtCore.QObject.connect(action2,QtCore.SIGNAL("triggered()"),self.invertHinge)
-            menu.addAction(action2)
+        """returns a list of hinge edge indices (0-based)"""
+
+        # WindowParts example:
+        # ["OuterFrame", "Frame",       "Wire0,Wire1",             "100.0+V", "0.00+V",
+        #  "InnerFrame", "Frame",       "Wire2,Wire3,Edge8,Mode1", "100.0",   "100.0+V",
+        #  "InnerGlass", "Glass panel", "Wire3",                   "10.0",    "150.0+V"]
+
+        idxs = []
+        parts = self.Object.WindowParts
+        for i in range(len(parts) // 5):
+            for s in parts[(i * 5) + 2].split(","):
+                if "Edge" in s:
+                    idxs.append(int(s[4:]) - 1) # Edge indices in string are 1-based.
+        return idxs
+
+    def setEdit(self, vobj, mode):
+        if mode != 0:
+            return None
+
+        taskd = _ArchWindowTaskPanel()
+        taskd.obj = self.Object
+        self.sets = [vobj.DisplayMode,vobj.Transparency]
+        vobj.DisplayMode = "Shaded"
+        vobj.Transparency = 80
+        if self.Object.Base:
+            self.Object.Base.ViewObject.show()
+        taskd.update()
+        FreeCADGui.Control.showDialog(taskd)
+        return True
+
+    def unsetEdit(self, vobj, mode):
+        if mode != 0:
+            return None
+
+        vobj.DisplayMode = self.sets[0]
+        vobj.Transparency = self.sets[1]
+        vobj.DiffuseColor = vobj.DiffuseColor # reset face colors
+        if self.Object.Base:
+            self.Object.Base.ViewObject.hide()
+        FreeCADGui.Control.closeDialog()
+        return True
+
+    def setupContextMenu(self, vobj, menu):
+        hingeIdxs = self.getHingeEdgeIndices()
+
+        super().contextMenuAddEdit(menu)
+
+        if len(hingeIdxs) > 0:
+            actionInvertOpening = QtGui.QAction(QtGui.QIcon(":/icons/Arch_Window_Tree.svg"),
+                                                translate("Arch", "Invert opening direction"),
+                                                menu)
+            QtCore.QObject.connect(actionInvertOpening,
+                                   QtCore.SIGNAL("triggered()"),
+                                   self.invertOpening)
+            menu.addAction(actionInvertOpening)
+
+        if len(hingeIdxs) == 1:
+            actionInvertHinge = QtGui.QAction(QtGui.QIcon(":/icons/Arch_Window_Tree.svg"),
+                                              translate("Arch", "Invert hinge position"),
+                                              menu)
+            QtCore.QObject.connect(actionInvertHinge,
+                                   QtCore.SIGNAL("triggered()"),
+                                   self.invertHinge)
+            menu.addAction(actionInvertHinge)
+
+        super().contextMenuAddToggleSubcomponents(menu)
 
     def invertOpening(self):
 
@@ -1198,10 +1287,28 @@ class _ViewProviderWindow(ArchComponent.ViewProviderComponent):
 
     def invertHinge(self):
 
-        """swaps the hinges found in this window"""
+        """swaps the hinge edge of a single hinge edge window"""
 
-        pairs = [["Edge6","Edge8"],["Edge5","Edge7"]]
+        idxs = self.getHingeEdgeIndices()
+        if len(idxs) != 1:
+            return
+
+        idx = idxs[0]
+        end = 0
+        for wire in self.Object.Base.Shape.Wires:
+            sta = end
+            end += len(wire.Edges)
+            if sta <= idx < end:
+                new = idx + 2 # A rectangular wire is assumed.
+                if not (sta <= new < end):
+                    new = idx - 2
+                break
+
+        pairs = [["Edge" + str(idx + 1), "Edge" + str(new + 1)]]
         self.invertPairs(pairs)
+        # Also invert opening direction, so the door still opens towards
+        # the same side of the wall
+        self.invertOpening()
 
     def invertPairs(self,pairs):
 

@@ -22,10 +22,7 @@
 #ifndef PATH_VORONOICELL_H
 #define PATH_VORONOICELL_H
 
-#include <Base/Handle.h>
 #include <Base/BaseClass.h>
-#include <Base/Vector3D.h>
-#include <Base/VectorPy.h>
 #include "Voronoi.h"
 
 namespace Path
@@ -36,14 +33,14 @@ class Voronoi;
 class PathExport VoronoiCell
   : public Base::BaseClass
 {
-  TYPESYSTEM_HEADER();
+  TYPESYSTEM_HEADER_WITH_OVERRIDE();
 public:
 
-  VoronoiCell(Voronoi::diagram_type *dia = 0, long index = Voronoi::InvalidIndex);
+  VoronoiCell(Voronoi::diagram_type *dia = nullptr, long index = Voronoi::InvalidIndex);
   VoronoiCell(Voronoi::diagram_type *dia, const Voronoi::diagram_type::cell_type *cell);
-  ~VoronoiCell();
+  ~VoronoiCell() override;
 
-  bool isBound(void) const;
+  bool isBound() const;
 
   Voronoi::point_type   sourcePoint()  const;
   Voronoi::segment_type sourceSegment() const;

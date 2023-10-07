@@ -51,7 +51,7 @@
         <item row="3" column="1">
          <widget class="Gui::InputField" name="if_max">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -63,15 +63,15 @@
            </size>
           </property>
           <property name="text">
-           <string>0.0</string>
+           <string>0 mm</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
           </property>
-          <property name="singleStep" stdset="0">
+          <property name="singleStep">
            <double>1.000000000000000</double>
           </property>
-          <property name="maximum" stdset="0">
+          <property name="maximum">
            <double>1000000000.000000000000000</double>
           </property>
           <property name="unit" stdset="0">
@@ -95,7 +95,7 @@
         <item row="4" column="1">
          <widget class="Gui::InputField" name="if_min">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -107,15 +107,15 @@
            </size>
           </property>
           <property name="text">
-           <string>0.0</string>
+           <string>0 mm</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
           </property>
-          <property name="singleStep" stdset="0">
+          <property name="singleStep">
            <double>1.000000000000000</double>
           </property>
-          <property name="maximum" stdset="0">
+          <property name="maximum">
            <double>1000000000.000000000000000</double>
           </property>
           <property name="unit" stdset="0">

@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string notr="true">Form</string>
   </property>
   <property name="windowIcon">
    <iconset resource="../Path.qrc">
@@ -25,6 +25,22 @@
      </property>
     </widget>
    </item>
+   <item row="0" column="1">
+    <widget class="Gui::QuantitySpinBox" name="safeHeight">
+     <property name="toolTip">
+      <string>The height above which it is safe to move the tool bit with rapid movements. Below this height all lateral and downward movements are performed with feed rate speeds.</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+     <property name="minimum">
+      <double>-999999999.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>999999999.000000000000000</double>
+     </property>
+    </widget>
+   </item>
    <item row="1" column="0">
     <widget class="QLabel" name="label_9">
      <property name="text">
@@ -32,7 +48,23 @@
      </property>
     </widget>
    </item>
-   <item row="2" column="0" colspan="2">
+   <item row="1" column="1">
+    <widget class="Gui::QuantitySpinBox" name="clearanceHeight">
+     <property name="toolTip">
+      <string>The height where lateral movement of the toolbit is not obstructed by any fixtures or the part / stock material itself.</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+     <property name="minimum">
+      <double>-999999999.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>999999999.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+  <item row="2" column="0" colspan="2">
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -45,39 +77,7 @@
      </property>
     </spacer>
    </item>
-   <item row="0" column="1">
-    <widget class="Gui::QuantitySpinBox" name="safeHeight">
-     <property name="toolTip">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The height above which it is safe to move the tool bit with rapid movements. Below this height all lateral and downward movements are performed with feed rate speeds.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-     <property name="minimum">
-      <double>-999999999.000000000000000</double>
-     </property>
-     <property name="maximum">
-      <double>999999999.000000000000000</double>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="Gui::QuantitySpinBox" name="clearanceHeight">
-     <property name="toolTip">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The height where lateral movement of the toolbit is not obstructed by any fixtures or the part / stock material itself.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-     <property name="minimum">
-      <double>-999999999.000000000000000</double>
-     </property>
-     <property name="maximum">
-      <double>999999999.000000000000000</double>
-     </property>
-    </widget>
-   </item>
-  </layout>
+   </layout>
  </widget>
  <customwidgets>
   <customwidget>

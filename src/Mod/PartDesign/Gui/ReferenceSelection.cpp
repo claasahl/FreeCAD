@@ -23,35 +23,34 @@
 #include "PreCompiled.h"
 
 #ifndef _PreComp_
+# include <BRepAdaptor_Curve.hxx>
+# include <BRepAdaptor_Surface.hxx>
 # include <TopoDS.hxx>
 # include <TopoDS_Edge.hxx>
 # include <TopoDS_Face.hxx>
-# include <BRepAdaptor_Curve.hxx>
-# include <BRepAdaptor_Surface.hxx>
 # include <QDialog>
 #endif
 
-#include <App/OriginFeature.h>
-#include <App/GeoFeatureGroupExtension.h>
+#include <App/Document.h>
 #include <App/Origin.h>
+#include <App/OriginFeature.h>
 #include <App/Part.h>
-#include <Gui/Application.h>
-#include <Gui/Document.h>
 #include <Gui/Command.h>
+#include <Gui/Document.h>
 #include <Gui/MainWindow.h>
-#include <Mod/Part/App/TopoShape.h>
 #include <Mod/Part/App/PartFeature.h>
+#include <Mod/Part/App/TopoShape.h>
 #include <Mod/PartDesign/App/Feature.h>
 #include <Mod/PartDesign/App/Body.h>
-#include <Mod/PartDesign/App/DatumPoint.h>
 #include <Mod/PartDesign/App/DatumLine.h>
 #include <Mod/PartDesign/App/DatumPlane.h>
+#include <Mod/PartDesign/App/DatumPoint.h>
 
-#include "Utils.h"
-
+#include "ui_DlgReference.h"
 #include "ReferenceSelection.h"
 #include "TaskFeaturePick.h"
-#include <ui_DlgReference.h>
+#include "Utils.h"
+
 
 using namespace PartDesignGui;
 using namespace Gui;
@@ -341,21 +340,24 @@ bool getReferencedSelection(const App::DocumentObject* thisObj, const Gui::Selec
 
 QString getRefStr(const App::DocumentObject* obj, const std::vector<std::string>& sub)
 {
-    if (obj == NULL)
-        return QString::fromLatin1("");
+    if (!obj) {
+        return {};
+    }
 
-    if (PartDesign::Feature::isDatum(obj))
+    if (PartDesign::Feature::isDatum(obj)) {
         return QString::fromLatin1(obj->getNameInDocument());
-    else if (sub.size()>0)
+    }
+    else if (!sub.empty()) {
         return QString::fromLatin1(obj->getNameInDocument()) + QString::fromLatin1(":") +
                QString::fromLatin1(sub.front().c_str());
-    else
-        return QString();
+    }
+
+    return {};
 }
 
 std::string buildLinkSubPythonStr(const App::DocumentObject* obj, const std::vector<std::string>& subs)
 {
-    if ( obj == NULL)
+    if (!obj)
         return "None";
 
     std::string result("[");
@@ -370,7 +372,7 @@ std::string buildLinkSubPythonStr(const App::DocumentObject* obj, const std::vec
 std::string buildLinkSingleSubPythonStr(const App::DocumentObject* obj,
         const std::vector<std::string>& subs)
 {
-    if (obj == NULL)
+    if (!obj)
         return "None";
 
     if (PartDesign::Feature::isDatum(obj))
@@ -387,8 +389,8 @@ std::string buildLinkListPythonStr(const std::vector<App::DocumentObject*> & obj
 
     std::string result("[");
 
-    for (std::vector<App::DocumentObject*>::const_iterator o = objs.begin(); o != objs.end(); o++)
-        result += Gui::Command::getObjectCmd(*o,0,",");
+    for (auto obj : objs)
+        result += Gui::Command::getObjectCmd(obj,nullptr,",");
     result += "]";
 
     return result;

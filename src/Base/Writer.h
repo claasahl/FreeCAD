@@ -29,6 +29,7 @@
 #include <sstream>
 #include <vector>
 #include <cassert>
+#include <memory>
 
 #ifdef _MSC_VER
 #include <zipios++/zipios-config.h>
@@ -58,13 +59,13 @@ class BaseExport Writer
 {
 
 public:
-    Writer(void);
+    Writer();
     virtual ~Writer();
 
     /// switch the writer in XML only mode (no files allowed)
     void setForceXML(bool on);
     /// check on state
-    bool isForceXML(void);
+    bool isForceXML();
     void setFileVersion(int);
     int getFileVersion() const;
 
@@ -72,13 +73,15 @@ public:
     void insertAsciiFile(const char* FileName);
     /// insert a binary file BASE64 coded as CDATA section in the XML file
     void insertBinFile(const char* FileName);
+    /// insert text string as CDATA
+    void insertText(const std::string &s);
 
     /** @name additional file writing */
     //@{
     /// add a write request of a persistent object
     std::string addFile(const char* Name, const Base::Persistence *Object);
     /// process the requested file storing
-    virtual void writeFiles(void)=0;
+    virtual void writeFiles()=0;
     /// get all registered file names
     const std::vector<std::string>& getFilenames() const;
     /// Set mode
@@ -106,14 +109,31 @@ public:
     /** @name pretty formatting for XML */
     //@{
     /// get the current indentation
-    const char* ind(void) const {return indBuf;}
+    const char* ind() const {return indBuf;}
     /// increase indentation by one tab
-    void incInd(void);
+    void incInd();
     /// decrease indentation by one tab
-    void decInd(void);
+    void decInd();
     //@}
 
-    virtual std::ostream &Stream(void)=0;
+    virtual std::ostream &Stream()=0;
+
+    /** Create an output stream for storing character content
+     * The input is assumed to be valid character with
+     * the current XML encoding, and will be enclosed inside
+     * CDATA section.  The stream will scan the input and
+     * properly escape any CDATA ending inside.
+     * @return Returns an output stream.
+     *
+     * You must call endCharStream() to end the current character stream.
+     */
+    std::ostream &beginCharStream();
+    /** End the current character output stream
+     * @return Returns the normal writer stream for convenience
+     */
+    std::ostream &endCharStream();
+    /// Return the current character output stream
+    std::ostream &charStream();
 
     /// name for underlying file saves
     std::string ObjectName;
@@ -129,11 +149,18 @@ protected:
     std::vector<std::string> Errors;
     std::set<std::string> Modes;
 
-    short indent;
-    char indBuf[1024];
+    short indent{0};
+    char indBuf[1024]{};
 
-    bool forceXML;
-    int fileVersion;
+    bool forceXML{false};
+    int fileVersion{1};
+
+public:
+    Writer(const Writer&) = delete;
+    Writer& operator=(const Writer&) = delete;
+
+private:
+    std::unique_ptr<std::ostream> CharStream;
 };
 
 
@@ -148,11 +175,11 @@ class BaseExport ZipWriter : public Writer
 public:
     ZipWriter(const char* FileName);
     ZipWriter(std::ostream&);
-    virtual ~ZipWriter();
+    ~ZipWriter() override;
 
-    virtual void writeFiles(void);
+    void writeFiles() override;
 
-    virtual std::ostream &Stream(void){return ZipStream;}
+    std::ostream &Stream() override{return ZipStream;}
 
     void setComment(const char* str){ZipStream.setComment(str);}
     void setLevel(int level){ZipStream.setLevel( level );}
@@ -172,9 +199,9 @@ class BaseExport StringWriter : public Writer
 {
 
 public:
-    virtual std::ostream &Stream(void){return StrStream;}
-    std::string getString(void) const {return StrStream.str();}
-    virtual void writeFiles(void){}
+    std::ostream &Stream() override{return StrStream;}
+    std::string getString() const {return StrStream.str();}
+    void writeFiles() override{}
 
 private:
     std::stringstream StrStream;
@@ -189,12 +216,12 @@ class BaseExport FileWriter : public Writer
 {
 public:
     FileWriter(const char* DirName);
-    virtual ~FileWriter();
+    ~FileWriter() override;
 
     void putNextEntry(const char* file);
-    virtual void writeFiles(void);
+    void writeFiles() override;
 
-    virtual std::ostream &Stream(void){return FileStream;}
+    std::ostream &Stream() override{return FileStream;}
     void close() {FileStream.close();}
     /*!
      This method can be re-implemented in sub-classes to avoid

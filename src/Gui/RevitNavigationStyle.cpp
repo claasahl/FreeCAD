@@ -20,28 +20,15 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <cfloat>
-# include "InventorAll.h"
-# include <QAction>
-# include <QActionGroup>
+# include <Inventor/nodes/SoCamera.h>
 # include <QApplication>
-# include <QByteArray>
-# include <QCursor>
-# include <QList>
-# include <QMenu>
-# include <QMetaObject>
-# include <QRegExp>
 #endif
 
-#include <App/Application.h>
 #include "NavigationStyle.h"
 #include "View3DInventorViewer.h"
-#include "Application.h"
-#include "MenuManager.h"
-#include "MouseSelection.h"
+
 
 using namespace Gui;
 
@@ -55,9 +42,7 @@ RevitNavigationStyle::RevitNavigationStyle() : lockButton1(false)
 {
 }
 
-RevitNavigationStyle::~RevitNavigationStyle()
-{
-}
+RevitNavigationStyle::~RevitNavigationStyle() = default;
 
 const char* RevitNavigationStyle::mouseButtons(ViewerMode mode)
 {
@@ -80,7 +65,9 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
     // Events when in "ready-to-seek" mode are ignored, except those
     // which influence the seek mode itself -- these are handled further
     // up the inheritance hierarchy.
-    if (this->isSeekMode()) { return inherited::processSoEvent(ev); }
+    if (this->isSeekMode()) {
+        return inherited::processSoEvent(ev);
+    }
     // Switch off viewing mode (Bug #0000911)
     if (!this->isSeekMode() && !this->isAnimating() && this->isViewing())
         this->setViewing(false); // by default disable viewing mode to render the scene
@@ -116,13 +103,13 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
 
     // Keyboard handling
     if (type.isDerivedFrom(SoKeyboardEvent::getClassTypeId())) {
-        const SoKeyboardEvent * const event = static_cast<const SoKeyboardEvent *>(ev);
+        const auto event = static_cast<const SoKeyboardEvent *>(ev);
         processed = processKeyboardEvent(event);
     }
 
     // Mouse Button / Spaceball Button handling
     if (type.isDerivedFrom(SoMouseButtonEvent::getClassTypeId())) {
-        const SoMouseButtonEvent * const event = (const SoMouseButtonEvent *) ev;
+        const auto event = (const SoMouseButtonEvent *) ev;
         const int button = event->getButton();
         const SbBool press = event->getState() == SoButtonEvent::DOWN ? true : false;
 
@@ -207,7 +194,7 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
     // Mouse Movement handling
     if (type.isDerivedFrom(SoLocation2Event::getClassTypeId())) {
         this->lockrecenter = true;
-        const SoLocation2Event * const event = (const SoLocation2Event *) ev;
+        const auto event = (const SoLocation2Event *) ev;
         if (this->currentmode == NavigationStyle::ZOOMING) {
             this->zoomByCursor(posn, prevnormalized);
             processed = true;
@@ -227,7 +214,7 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
 
     // Spaceball & Joystick handling
     if (type.isDerivedFrom(SoMotion3Event::getClassTypeId())) {
-        const SoMotion3Event * const event = static_cast<const SoMotion3Event *>(ev);
+        const auto event = static_cast<const SoMotion3Event *>(ev);
         if (event)
             this->processMotionEvent(event);
         processed = true;
@@ -267,8 +254,6 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
             newmode = NavigationStyle::SELECTION;
         break;
     case BUTTON1DOWN|BUTTON2DOWN:
-        newmode = NavigationStyle::PANNING;
-        break;
     case BUTTON3DOWN:
         newmode = NavigationStyle::PANNING;
         break;
@@ -284,6 +269,13 @@ SbBool RevitNavigationStyle::processSoEvent(const SoEvent * const ev)
         break;
 
     default:
+        // Reset mode to SELECTION when button 3 is released
+        // This stops the DRAGGING when button 3 is released but SHIFT is still pressed
+        // This stops the ZOOMING when button 3 is released but CTRL is still pressed
+        if ((curmode == NavigationStyle::DRAGGING || curmode == NavigationStyle::ZOOMING)
+            && !this->button3down) {
+            newmode = NavigationStyle::SELECTION;
+        }
         break;
     }
 

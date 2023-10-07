@@ -20,59 +20,48 @@
  *                                                                            *
  ******************************************************************************/
 
-
 #include "PreCompiled.h"
 #ifndef _PreComp_
-# include <BRepBuilderAPI_Transform.hxx>
-# include <BRepAlgoAPI_Fuse.hxx>
-# include <BRepAlgoAPI_Cut.hxx>
-# include <BRep_Builder.hxx>
-# include <TopExp.hxx>
-# include <TopExp_Explorer.hxx>
-# include <TopTools_IndexedMapOfShape.hxx>
-# include <Precision.hxx>
-# include <BRepBuilderAPI_Copy.hxx>
-# include <BRepBndLib.hxx>
 # include <Bnd_Box.hxx>
+# include <BRep_Builder.hxx>
+# include <BRepAlgoAPI_Cut.hxx>
+# include <BRepAlgoAPI_Fuse.hxx>
+# include <BRepBndLib.hxx>
+# include <BRepBuilderAPI_Copy.hxx>
+# include <BRepBuilderAPI_Transform.hxx>
+# include <Precision.hxx>
+# include <TopExp_Explorer.hxx>
 #endif
 
-#ifndef FC_DEBUG
-#include <ctime>
-#endif
+#include <App/Application.h>
+#include <Base/Console.h>
+#include <Base/Exception.h>
+#include <Base/Parameter.h>
+#include <Base/Reader.h>
+#include <Mod/Part/App/modelRefine.h>
 
 #include "FeatureTransformed.h"
-#include "FeatureMultiTransform.h"
+#include "Body.h"
 #include "FeatureAddSub.h"
 #include "FeatureMirrored.h"
 #include "FeatureLinearPattern.h"
 #include "FeaturePolarPattern.h"
 #include "FeatureSketchBased.h"
-#include "Body.h"
 
-#include <Base/Console.h>
-#include <Base/Exception.h>
-#include <Base/Parameter.h>
-#include <Base/Reader.h>
-#include <App/Application.h>
-#include <Mod/Part/App/modelRefine.h>
 
 using namespace PartDesign;
 
 namespace PartDesign {
 
-const char* Transformed::OverlapEnums[] = { "Detect", "Overlap mode", "Non-overlap mode", NULL};
-
 PROPERTY_SOURCE(PartDesign::Transformed, PartDesign::Feature)
 
 Transformed::Transformed()
 {
-    ADD_PROPERTY(Originals,(0));
+    ADD_PROPERTY(Originals,(nullptr));
     Originals.setSize(0);
     Placement.setStatus(App::Property::ReadOnly, true);
 
     ADD_PROPERTY_TYPE(Refine,(0),"Part Design",(App::PropertyType)(App::Prop_None),"Refine shape (clean up redundant edges) after adding/subtracting");
-    ADD_PROPERTY_TYPE(Overlap, (0L), "Transform", App::Prop_None, "Feature overlapping behaviour");
-    Overlap.setEnums(OverlapEnums);
 
     //init Refine property
     Base::Reference<ParameterGrp> hGrp = App::GetApplication().GetUserParameter()
@@ -80,7 +69,7 @@ Transformed::Transformed()
     this->Refine.setValue(hGrp->GetBool("RefineModel", false));
 }
 
-void Transformed::positionBySupport(void)
+void Transformed::positionBySupport()
 {
     // TODO May be here better to throw exception (silent=false) (2015-07-27, Fat-Zer)
     Part::Feature *support = getBaseObject(/* silent =*/ true);
@@ -97,15 +86,15 @@ Part::Feature* Transformed::getBaseObject(bool silent) const {
     const char* err = nullptr;
     const std::vector<App::DocumentObject*> & originals = Originals.getValues();
     // NOTE: may be here supposed to be last origin but in order to keep the old behaviour keep here first
-    App::DocumentObject* firstOriginal = originals.empty() ? NULL : originals.front();
+    App::DocumentObject* firstOriginal = originals.empty() ? nullptr : originals.front();
     if (firstOriginal) {
         if(firstOriginal->isDerivedFrom(Part::Feature::getClassTypeId())) {
             rv = static_cast<Part::Feature*>(firstOriginal);
         } else {
-            err = "Transformation feature Linked object is not a Part object";
+            err = QT_TRANSLATE_NOOP("Exception", "Transformation feature Linked object is not a Part object");
         }
     } else {
-        err = "No originals linked to the transformed feature.";
+        err = QT_TRANSLATE_NOOP("Exception", "No originals linked to the transformed feature.");
     }
 
     if (!silent && err) {
@@ -122,7 +111,7 @@ App::DocumentObject* Transformed::getSketchObject() const
         return (static_cast<PartDesign::ProfileBased*>(originals.front()))->getVerifiedSketch(true);
     }
     else if (!originals.empty() && originals.front()->getTypeId().isDerivedFrom(PartDesign::FeatureAddSub::getClassTypeId())) {
-        return NULL;
+        return nullptr;
     }
     else if (this->getTypeId().isDerivedFrom(LinearPattern::getClassTypeId())) {
         // if Originals is empty then try the linear pattern's Direction property
@@ -140,7 +129,7 @@ App::DocumentObject* Transformed::getSketchObject() const
         return pattern->MirrorPlane.getValue();
     }
     else {
-        return 0;
+        return nullptr;
     }
 }
 
@@ -174,16 +163,8 @@ short Transformed::mustExecute() const
     return PartDesign::Feature::mustExecute();
 }
 
-App::DocumentObjectExecReturn *Transformed::execute(void)
+App::DocumentObjectExecReturn *Transformed::execute()
 {
-    std::string overlapMode = Overlap.getValueAsString();
-    bool overlapDetectionMode = overlapMode == "Detect";
-
-#ifndef FC_DEBUG
-    std::clock_t start0;
-    start0 = std::clock();
-#endif
-
     std::vector<App::DocumentObject*> originals = Originals.getValues();
     if (originals.empty()) // typically InsideMultiTransform
         return App::DocumentObject::StdReturn;
@@ -220,7 +201,7 @@ App::DocumentObjectExecReturn *Transformed::execute(void)
 
     const Part::TopoShape& supportTopShape = supportFeature->Shape.getShape();
     if (supportTopShape.getShape().IsNull())
-        return new App::DocumentObjectExecReturn("Cannot transform invalid support shape");
+        return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Cannot transform invalid support shape"));
 
     // create an untransformed copy of the support shape
     Part::TopoShape supportShape(supportTopShape);
@@ -230,96 +211,94 @@ App::DocumentObjectExecReturn *Transformed::execute(void)
     supportShape.setTransform(Base::Matrix4D());
     TopoDS_Shape support = supportShape.getShape();
 
+    auto getTransformedCompShape = [&](const auto& origShape)
+    {
+        TopTools_ListOfShape shapeTools;
+        std::vector<TopoDS_Shape> shapes;
+
+        std::vector<gp_Trsf>::const_iterator transformIter = transformations.begin();
+
+        // First transformation is skipped since it should not be part of the toolShape.
+        ++transformIter;
+
+        for (; transformIter != transformations.end(); ++transformIter) {
+            // Make an explicit copy of the shape because the "true" parameter to BRepBuilderAPI_Transform
+            // seems to be pretty broken
+            BRepBuilderAPI_Copy copy(origShape);
+
+            TopoDS_Shape shape = copy.Shape();
+
+            BRepBuilderAPI_Transform mkTrf(shape, *transformIter, false); // No need to copy, now
+            if (!mkTrf.IsDone()) {
+                throw Base::CADKernelError(QT_TRANSLATE_NOOP("Exception", "Transformation failed"));
+            }
+            shape = mkTrf.Shape();
+
+            shapes.emplace_back(shape);
+        }
+
+        for (const auto& shape : shapes)
+            shapeTools.Append(shape);
+
+        return shapeTools;
+    };
+
     // NOTE: It would be possible to build a compound from all original addShapes/subShapes and then
     // transform the compounds as a whole. But we choose to apply the transformations to each
     // Original separately. This way it is easier to discover what feature causes a fuse/cut
     // to fail. The downside is that performance suffers when there are many originals. But it seems
     // safe to assume that in most cases there are few originals and many transformations
-    for (std::vector<App::DocumentObject*>::const_iterator o = originals.begin(); o != originals.end(); ++o)
+    for (auto original : originals)
     {
         // Extract the original shape and determine whether to cut or to fuse
-        TopoDS_Shape shape;
         Part::TopoShape fuseShape;
         Part::TopoShape cutShape;
 
-        if ((*o)->getTypeId().isDerivedFrom(PartDesign::FeatureAddSub::getClassTypeId())) {
-            PartDesign::FeatureAddSub* feature = static_cast<PartDesign::FeatureAddSub*>(*o);
+        if (original->getTypeId().isDerivedFrom(PartDesign::FeatureAddSub::getClassTypeId())) {
+            PartDesign::FeatureAddSub* feature = static_cast<PartDesign::FeatureAddSub*>(original);
             feature->getAddSubShape(fuseShape, cutShape);
             if (fuseShape.isNull() && cutShape.isNull())
-                return new App::DocumentObjectExecReturn("Shape of addsub feature is empty");
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Shape of additive/subtractive feature is empty"));
             gp_Trsf trsf = feature->getLocation().Transformation().Multiplied(trsfInv);
             if (!fuseShape.isNull())
-                fuseShape = fuseShape.makETransform(trsf);
+                fuseShape = fuseShape.makeTransform(trsf);
             if (!cutShape.isNull())
-                cutShape = cutShape.makETransform(trsf);
+                cutShape = cutShape.makeTransform(trsf);
         }
         else {
-            return new App::DocumentObjectExecReturn("Only additive and subtractive features can be transformed");
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Only additive and subtractive features can be transformed"));
         }
-        TopoDS_Shape origShape = fuseShape.isNull()?cutShape.getShape():fuseShape.getShape();
 
         TopoDS_Shape current = support;
-
-        BRep_Builder builder;
-        TopoDS_Compound compShape;
-        builder.MakeCompound(compShape);
-        std::vector<TopoDS_Shape> shapes;
-        bool overlapping = false;
-
-        std::vector<gp_Trsf>::const_iterator t = transformations.begin();
-        bool first = true;
-        for (; t != transformations.end(); ++t) {
-            // Make an explicit copy of the shape because the "true" parameter to BRepBuilderAPI_Transform
-            // seems to be pretty broken
-            BRepBuilderAPI_Copy copy(origShape);
-
-            shape = copy.Shape();
-
-            BRepBuilderAPI_Transform mkTrf(shape, *t, false); // No need to copy, now
-            if (!mkTrf.IsDone())
-                return new App::DocumentObjectExecReturn("Transformation failed", (*o));
-            shape = mkTrf.Shape();
-
-            shapes.emplace_back(shape);
-            builder.Add(compShape, shape);
-
-            if (overlapDetectionMode && !first)
-                overlapping =  overlapping || (countSolids(TopoShape(origShape).fuse(shape))==1);
-
-            if (first)
-                first = false;
-        }
-
-        TopoDS_Shape toolShape;
-
-#ifndef FC_DEBUG
-        if (overlapping || overlapMode == "Overlap mode")
-            Base::Console().Message("Transformed: Overlapping feature mode (fusing tool shapes)\n");
-        else
-            Base::Console().Message("Transformed: Non-Overlapping feature mode (compound of tool shapes)\n");
-#endif
-
-        if (overlapping || overlapMode == "Overlap mode")
-            toolShape = TopoShape(origShape).fuse(shapes, Precision::Confusion());
-        else
-            toolShape = compShape;
-
         if (!fuseShape.isNull()) {
-            std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkBool(new BRepAlgoAPI_Fuse(current, toolShape));
-            if (!mkBool->IsDone()) {
-                std::stringstream error;
-                error << "Boolean operation failed";
-                return new App::DocumentObjectExecReturn(error.str());
+            TopTools_ListOfShape shapeArguments;
+            shapeArguments.Append(current);
+            TopTools_ListOfShape shapeTools = getTransformedCompShape(fuseShape.getShape());
+            if (!shapeTools.IsEmpty()) {
+                std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkBool(new BRepAlgoAPI_Fuse());
+                mkBool->SetArguments(shapeArguments);
+                mkBool->SetTools(shapeTools);
+                mkBool->Build();
+                if (!mkBool->IsDone()) {
+                    return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Boolean operation failed"));
+                }
+                current = mkBool->Shape();
             }
-            current = mkBool->Shape();
-        } else {
-            std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkBool(new BRepAlgoAPI_Cut(current, toolShape));
-            if (!mkBool->IsDone()) {
-                std::stringstream error;
-                error << "Boolean operation failed";
-                return new App::DocumentObjectExecReturn(error.str());
+        }
+        if (!cutShape.isNull()) {
+            TopTools_ListOfShape shapeArguments;
+            shapeArguments.Append(current);
+            TopTools_ListOfShape shapeTools = getTransformedCompShape(cutShape.getShape());
+            if (!shapeTools.IsEmpty()) {
+                std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkBool(new BRepAlgoAPI_Cut());
+                mkBool->SetArguments(shapeArguments);
+                mkBool->SetTools(shapeTools);
+                mkBool->Build();
+                if (!mkBool->IsDone()) {
+                    return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP("Exception", "Boolean operation failed"));
+                }
+                current = mkBool->Shape();
             }
-            current = mkBool->Shape();
         }
 
         support = current; // Use result of this operation for fuse/cut of next original
@@ -334,10 +313,6 @@ App::DocumentObjectExecReturn *Transformed::execute(void)
 
     this->Shape.setValue(getSolid(support));  // picking the first solid
     rejected = getRemainingSolids(support);
-
-#ifndef FC_DEBUG
-    Base::Console().Message("Transformed: Elapsed CPU time: %f s\n", (std::clock() - start0  ) / (double)(CLOCKS_PER_SEC));
-#endif
 
     return App::DocumentObject::StdReturn;
 }
@@ -364,9 +339,9 @@ TopoDS_Shape Transformed::refineShapeIfActive(const TopoDS_Shape& oldShape) cons
 void Transformed::divideTools(const std::vector<TopoDS_Shape> &toolsIn, std::vector<TopoDS_Shape> &individualsOut,
                               TopoDS_Compound &compoundOut) const
 {
-    typedef std::pair<TopoDS_Shape, Bnd_Box> ShapeBoundPair;
-    typedef std::list<ShapeBoundPair> PairList;
-    typedef std::vector<ShapeBoundPair> PairVector;
+    using ShapeBoundPair = std::pair<TopoDS_Shape, Bnd_Box>;
+    using PairList = std::list<ShapeBoundPair>;
+    using PairVector = std::vector<ShapeBoundPair>;
 
     PairList pairList;
 

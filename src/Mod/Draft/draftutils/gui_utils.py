@@ -43,7 +43,7 @@ import FreeCAD as App
 import draftutils.utils as utils
 
 from draftutils.messages import _msg, _wrn, _err
-from draftutils.translate import _tr, translate
+from draftutils.translate import translate
 
 if App.GuiUp:
     import FreeCADGui as Gui
@@ -65,7 +65,7 @@ def get_3d_view():
     """
     if App.GuiUp:
         # FIXME The following two imports were added as part of PR4926
-        # Also see discussion https://forum.freecadweb.org/viewtopic.php?f=3&t=60251
+        # Also see discussion https://forum.freecad.org/viewtopic.php?f=3&t=60251
         import FreeCADGui as Gui
         from pivy import coin
         if Gui.ActiveDocument:
@@ -78,7 +78,7 @@ def get_3d_view():
             if v:
                 return v[0]
 
-    _wrn(_tr("No graphical interface"))
+    _wrn(translate("draft", "No graphical interface"))
     return None
 
 
@@ -123,39 +123,46 @@ def autogroup(obj):
                 return
 
     # autogroup code
+    active_group = None
     if Gui.draftToolBar.autogroup is not None:
         active_group = App.ActiveDocument.getObject(Gui.draftToolBar.autogroup)
         if active_group:
-            found = False
-            for o in active_group.Group:
-                if o.Name == obj.Name:
-                    found = True
-            if not found:
-                gr = active_group.Group
+            gr = active_group.Group
+            if not obj in gr:
                 gr.append(obj)
                 active_group.Group = gr
 
-    else:
+    if Gui.ActiveDocument.ActiveView.getActiveObject("NativeIFC"):
+        # NativeIFC handling
+        try:
+            import ifc_tools
+            parent = Gui.ActiveDocument.ActiveView.getActiveObject("NativeIFC")
+            if parent != active_group:
+                ifc_tools.aggregate(obj, parent)
+        except:
+            pass
 
-        if Gui.ActiveDocument.ActiveView.getActiveObject("Arch"):
-            # add object to active Arch Container
-            active_arch_obj = Gui.ActiveDocument.ActiveView.getActiveObject("Arch")
+    elif Gui.ActiveDocument.ActiveView.getActiveObject("Arch"):
+        # add object to active Arch Container
+        active_arch_obj = Gui.ActiveDocument.ActiveView.getActiveObject("Arch")
+        if active_arch_obj != active_group:
             if obj in active_arch_obj.InListRecursive:
                 # do not autogroup if obj points to active_arch_obj to prevent cyclic references
                 return
             active_arch_obj.addObject(obj)
 
-        elif Gui.ActiveDocument.ActiveView.getActiveObject("part", False) is not None:
-            # add object to active part and change it's placement accordingly
-            # so object does not jump to different position, works with App::Link
-            # if not scaled. Modified accordingly to realthunder suggestions
-            active_part, parent, sub = Gui.ActiveDocument.ActiveView.getActiveObject("part", False)
+    elif Gui.ActiveDocument.ActiveView.getActiveObject("part", False) is not None:
+        # add object to active part and change it's placement accordingly
+        # so object does not jump to different position, works with App::Link
+        # if not scaled. Modified accordingly to realthunder suggestions
+        active_part, parent, sub = Gui.ActiveDocument.ActiveView.getActiveObject("part", False)
+        if active_part != active_group:
             if obj in active_part.InListRecursive:
                 # do not autogroup if obj points to active_part to prevent cyclic references
                 return
             matrix = parent.getSubObject(sub, retType=4)
-            if matrix.hasScale() == 1:
-                err = translate("Draft",
+            if matrix.hasScale() == App.ScaleType.Uniform:
+                err = translate("draft",
                                 "Unable to insert new object into "
                                 "a scaled part")
                 App.Console.PrintMessage(err)
@@ -264,7 +271,7 @@ def dim_symbol(symbol=None, invert=False):
     elif symbol == 4:
         return dim_dash((-1.5, -1.5, 0), (1.5, 1.5, 0))
     else:
-        _wrn(_tr("Symbol not implemented. Use a default symbol."))
+        _wrn(translate("draft", "Symbol not implemented. Using a default symbol."))
         return coin.SoSphere()
 
 
@@ -330,11 +337,111 @@ def remove_hidden(objectslist):
         if obj.ViewObject:
             if not obj.ViewObject.isVisible():
                 newlist.remove(obj)
-                _msg(_tr("Visibility off; removed from list: ") + obj.Label)
+                _msg(translate("draft", "Visibility off; removed from list: ") + obj.Label)
     return newlist
 
 
 removeHidden = remove_hidden
+
+
+def get_diffuse_color(objs):
+    """Get a (cumulative) diffuse color from one or more objects.
+
+    If all tuples in the result are identical a list with a single tuple is
+    returned. In theory all faces of an object can be set to the same diffuse
+    color that is different from its shape color, but that seems rare. The
+    function does not take that into account.
+
+    Parameters
+    ----------
+    objs: a single object or an iterable with objects.
+
+    Returns
+    -------
+    list of tuples
+        The list will be empty if no valid object is found.
+    """
+    def _get_color(obj):
+        if hasattr(obj, "ColoredElements"):
+            if hasattr(obj, "Count") or hasattr(obj, "ElementCount"):
+                # Link and Link array.
+                if hasattr(obj, "Count"):
+                    count = obj.Count
+                    base = obj.Base
+                else:
+                    count = obj.ElementCount if obj.ElementCount > 0 else 1
+                    base = obj.LinkedObject
+                if base is None:
+                    return []
+                cols = _get_color(base) * count
+                if obj.ColoredElements is None:
+                    return cols
+                face_num = len(base.Shape.Faces)
+                for elm, overide in zip(obj.ColoredElements[1], obj.ViewObject.OverrideColorList):
+                    if "Face" in elm: # Examples: "Face3" and "1.Face6". Int before "." is zero-based, other int is 1-based.
+                        if "." in elm:
+                            elm0, elm1 = elm.split(".")
+                            i = (int(elm0) * face_num) + int(elm1[4:]) - 1
+                            cols[i] = overide
+                        else:
+                            i = int(elm[4:]) - 1
+                            for j in range(count):
+                                cols[(j * face_num) + i] = overide
+                return cols
+            elif hasattr(obj, "ElementList"):
+                # LinkGroup
+                cols = []
+                for sub in obj.ElementList:
+                    sub_cols = _get_color(sub)
+                    if obj.ColoredElements is None:
+                        cols += sub_cols
+                    else:
+                        for elm, overide in zip(obj.ColoredElements[1], obj.ViewObject.OverrideColorList):
+                            if sub.Name + ".Face" in elm:
+                                i = int(elm[(len(sub.Name) + 5):]) - 1
+                                sub_cols[i] = overide
+                        cols += sub_cols
+                return cols
+            else:
+                return []
+        elif hasattr(obj.ViewObject, "DiffuseColor"):
+            if len(obj.ViewObject.DiffuseColor) == len(obj.Shape.Faces):
+                return obj.ViewObject.DiffuseColor
+            else:
+                col = obj.ViewObject.ShapeColor
+                col = (col[0], col[1], col[2], obj.ViewObject.Transparency / 100.0)
+                return [col] * len(obj.Shape.Faces)
+        elif obj.hasExtension("App::GeoFeatureGroupExtension"):
+            cols = []
+            for sub in obj.Group:
+                cols += _get_color(sub)
+            return cols
+        else:
+            return []
+
+    if not isinstance(objs, list):
+        # Quick check to avoid processing a single object:
+        obj = objs
+        if not hasattr(obj, "ColoredElements") \
+                and hasattr(obj.ViewObject, "DiffuseColor") \
+                and (len(obj.ViewObject.DiffuseColor) == 1 \
+                        or len(obj.ViewObject.DiffuseColor) == len(obj.Shape.Faces)):
+            return obj.ViewObject.DiffuseColor
+        # Create a list for further processing:
+        objs = [objs]
+
+    colors = []
+    for obj in objs:
+        colors += _get_color(obj)
+
+    if len(colors) > 1:
+        first = colors[0]
+        for next in colors[1:]:
+            if next != first:
+                break
+        else:
+            colors = [first]
+    return colors
 
 
 def format_object(target, origin=None):
@@ -398,8 +505,6 @@ def format_object(target, origin=None):
         if not origin or not hasattr(origin, 'ViewObject'):
             if "FontSize" in obrep.PropertiesList:
                 obrep.FontSize = fs
-            if "TextSize" in obrep.PropertiesList:
-                obrep.TextSize = fs
             if "TextColor" in obrep.PropertiesList:
                 obrep.TextColor = tcol
             if "LineWidth" in obrep.PropertiesList:
@@ -407,12 +512,7 @@ def format_object(target, origin=None):
             if "PointColor" in obrep.PropertiesList:
                 obrep.PointColor = lcol
             if "LineColor" in obrep.PropertiesList:
-                if hasattr(obrep,"FontName") and (not hasattr(obrep,"TextColor")):
-                    # dimensions and other objects with text but no specific
-                    # TextColor property. TODO: Add TextColor property to dimensions
-                    obrep.LineColor = tcol
-                else:
-                    obrep.LineColor = lcol
+                obrep.LineColor = lcol
             if "ShapeColor" in obrep.PropertiesList:
                 obrep.ShapeColor = fcol
         else:
@@ -432,9 +532,10 @@ def format_object(target, origin=None):
                                 pass
             if matchrep.DisplayMode in obrep.listDisplayModes():
                 obrep.DisplayMode = matchrep.DisplayMode
-            if (hasattr(matchrep, "DiffuseColor")
-                    and hasattr(obrep, "DiffuseColor")):
-                obrep.DiffuseColor = matchrep.DiffuseColor
+            if hasattr(obrep, "DiffuseColor"):
+                difcol = get_diffuse_color(origin)
+                if difcol:
+                    obrep.DiffuseColor = difcol
 
 
 formatObject = format_object
@@ -600,13 +701,13 @@ def load_texture(filename, size=None, gui=App.GuiUp):
             p = QtGui.QImage(filename)
 
             if p.isNull():
-                _wrn("load_texture: " + _tr("image is Null"))
+                _wrn("load_texture: " + translate("draft", "image is Null"))
 
                 if not os.path.exists(filename):
                     raise FileNotFoundError(-1,
-                                            _tr("filename does not exist "
-                                                "on the system or "
-                                                "on the resource file"),
+                                            translate("draft", "filename does not exist "
+                                                               "on the system or "
+                                                               "in the resource file"),
                                             filename)
 
             # This is buggy so it was de-activated.
@@ -665,7 +766,7 @@ def load_texture(filename, size=None, gui=App.GuiUp):
             return None
         except Exception as exc:
             _wrn(str(exc))
-            _wrn("load_texture: " + _tr("unable to load texture"))
+            _wrn("load_texture: " + translate("draft", "unable to load texture"))
             return None
         else:
             return img
@@ -717,7 +818,7 @@ def get_bbox(obj, debug=False):
 
     found, doc = utils.find_doc(App.activeDocument())
     if not found:
-        _err(_tr("No active document. Aborting."))
+        _err(translate("draft", "No active document. Aborting."))
         return None
 
     if isinstance(obj, str):
@@ -726,7 +827,7 @@ def get_bbox(obj, debug=False):
     found, obj = utils.find_object(obj, doc)
     if not found:
         _msg("obj: {}".format(obj_str))
-        _err(_tr("Wrong input: object not in document."))
+        _err(translate("draft", "Wrong input: object not in document."))
         return None
 
     if debug:
@@ -735,7 +836,7 @@ def get_bbox(obj, debug=False):
     if (not hasattr(obj, "ViewObject")
             or not obj.ViewObject
             or not hasattr(obj.ViewObject, "RootNode")):
-        _err(_tr("Does not have 'ViewObject.RootNode'."))
+        _err(translate("draft", "Does not have 'ViewObject.RootNode'."))
 
     # For Draft Dimensions
     # node = obj.ViewObject.Proxy.node

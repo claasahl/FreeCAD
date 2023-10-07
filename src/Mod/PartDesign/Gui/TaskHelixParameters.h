@@ -20,16 +20,12 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #ifndef GUI_TASKVIEW_TaskHelixParameters_H
 #define GUI_TASKVIEW_TaskHelixParameters_H
 
-#include <Gui/TaskView/TaskView.h>
-#include <Gui/Selection.h>
-#include <Gui/TaskView/TaskDialog.h>
-
 #include "TaskSketchBasedParameters.h"
 #include "ViewProviderHelix.h"
+
 
 namespace App {
 class Property;
@@ -49,10 +45,10 @@ class TaskHelixParameters : public TaskSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskHelixParameters(ViewProviderHelix* HelixView, QWidget* parent = 0);
-    ~TaskHelixParameters();
+    explicit TaskHelixParameters(ViewProviderHelix* HelixView, QWidget* parent = nullptr);
+    ~TaskHelixParameters() override;
 
-    virtual void apply() override;
+    void apply() override;
 
     static bool showPreview(PartDesign::Helix*);
 
@@ -69,6 +65,8 @@ private:
     void addSketchAxes();
     void addPartAxes();
     int addCurrentLink();
+    void assignToolTipsFromPropertyDocs();
+    void adaptVisibilityToMode();
 
 private Q_SLOTS:
     void onPitchChanged(double);
@@ -135,7 +133,7 @@ class TaskDlgHelixParameters : public TaskDlgSketchBasedParameters
     Q_OBJECT
 
 public:
-    TaskDlgHelixParameters(ViewProviderHelix* HelixView);
+    explicit TaskDlgHelixParameters(ViewProviderHelix* HelixView);
 
     ViewProviderHelix* getHelixView() const
     { return static_cast<ViewProviderHelix*>(vp); }

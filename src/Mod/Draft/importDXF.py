@@ -25,7 +25,7 @@
 
 __title__ = "FreeCAD Draft Workbench - DXF importer/exporter"
 __author__ = "Yorik van Havre <yorik@uncreated.net>"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 ## @package importDXF
 #  \ingroup DRAFT
@@ -46,15 +46,21 @@ lines, polylines, lwpolylines, circles, arcs,
 texts, colors,layers (from groups)
 """
 # scaling factor between autocad font sizes and coin font sizes
-# the minimum version of the dxfLibrary needed to run
 TEXTSCALING = 1.35
-CURRENTDXFLIB = 1.40
+# the minimum version of the dxfLibrary needed to run
+CURRENTDXFLIB = 1.41
 
-import sys, os, math, re
-import six
+import sys
+import os
+import math
+import re
 import FreeCAD
-import Part, Draft, Mesh
-import DraftVecUtils, DraftGeomUtils, WorkingPlane
+import Part
+import Draft
+import Mesh
+import DraftVecUtils
+import DraftGeomUtils
+import WorkingPlane
 from Draft import _Dimension
 from FreeCAD import Vector
 from FreeCAD import Console as FCC
@@ -72,7 +78,7 @@ if gui:
         draftui = FreeCADGui.draftToolBar
     except (AttributeError, NameError):
         draftui = None
-    from DraftTools import translate
+    from draftutils.translate import translate
     from PySide import QtGui
 else:
     def translate(context, txt):
@@ -110,9 +116,8 @@ def errorDXFLib(gui):
         files = ['dxfColorMap.py', 'dxfImportObjects.py',
                  'dxfLibrary.py', 'dxfReader.py']
 
-        _weburl = 'https://raw.githubusercontent.com/yorikvanhavre/'
-        _weburl += 'Draft-dxf-importer/'
-        baseurl = _weburl + '{0:.2f}'.format(CURRENTDXFLIB) + "/"
+        baseurl = 'https://raw.githubusercontent.com/yorikvanhavre/'
+        baseurl += 'Draft-dxf-importer/master/'
         import ArchCommands
         from FreeCAD import Base
         progressbar = Base.ProgressIndicator()
@@ -143,9 +148,6 @@ Please either enable FreeCAD to download these libraries:
 Or download these libraries manually, as explained on
 https://github.com/yorikvanhavre/Draft-dxf-importer
 To enabled FreeCAD to download these libraries, answer Yes.""")
-            if six.PY2:
-                if not isinstance(message, six.text_type):
-                    message = message.decode('utf8')
             reply = QtGui.QMessageBox.question(None, "", message,
                                                QtGui.QMessageBox.Yes | QtGui.QMessageBox.No,
                                                QtGui.QMessageBox.No)
@@ -190,7 +192,7 @@ def getDXFlibs():
         libsok = False
         FCC.PrintWarning("DXF libraries not found. Trying to download...\n")
     else:
-        if "v"+str(CURRENTDXFLIB) in dxfLibrary.__version__:
+        if float(dxfLibrary.__version__[1:5]) >= CURRENTDXFLIB:
             libsok = True
         else:
             FCC.PrintWarning("DXF libraries need to be updated. "
@@ -211,41 +213,10 @@ def prec():
     return Draft.getParam("precision", 6)
 
 
-def decodeName(name):
-    """Decode the encoded name into utf8 or latin1.
-
-    Parameters
-    ----------
-    name : str
-        The string to decode.
-
-    Returns
-    -------
-    str
-        The decoded string in utf8, latin1, or the original `name`
-        if the decoding was not needed, for example,
-        when using Python 3.
-    """
-    try:
-        decodedName = (name.decode("utf8"))
-    except UnicodeDecodeError:
-        try:
-            decodedName = (name.decode("latin1"))
-        except UnicodeDecodeError:
-            print("dxf: error: couldn't determine character encoding")
-            decodedName = name
-    except AttributeError:
-        # this is python3 (nothing to do)
-        decodedName = name
-    return decodedName
-
-
 def deformat(text):
     """Remove weird formats in texts and wipes UTF characters.
 
     It removes `{}`, html codes, \\(U...) characters,
-    and decodes the string as utf8 or latin1 if needed.
-    For Python 3 there is no decoding needed.
 
     Parameters
     ----------
@@ -264,25 +235,7 @@ def deformat(text):
     t = re.sub("\\\.*?;", "", t)
     # replace UTF codes by utf chars
     sts = re.split("\\\\(U\+....)", t)
-    ns = u""
-    for ss in sts:
-        # print(ss, type(ss))
-        if ss.startswith("U+"):
-            ucode = "0x" + ss[2:]
-            # In Python3 unichr doesn't exist anymore
-            ns += six.unichr(eval(ucode))
-        else:
-            try:
-                ns += ss.decode("utf8")
-            except UnicodeError:
-                try:
-                    ns += ss.decode("latin1")
-                except UnicodeError:
-                    print("unable to decode text: ", text)
-            except AttributeError:
-                # this is python3 (nothing to do)
-                ns += ss
-    t = ns
+    t = u"".join(sts)
     # replace degrees, diameters chars
     t = re.sub('%%d', u'°', t)
     t = re.sub('%%c', u'Ø', t)
@@ -336,17 +289,18 @@ def locateLayer(wantedLayer, color=None, drawstyle=None):
     """
     # layers is a global variable.
     # It should probably be passed as an argument.
-    wantedLayerName = decodeName(wantedLayer)
-    for l in layers:
-        if wantedLayerName == l.Label:
-            return l
+    if wantedLayer is None:
+        wantedLayer = '0'
+    for layer in layers:
+        if layer.Label == wantedLayer:
+            return layer
     if dxfUseDraftVisGroups:
         newLayer = Draft.make_layer(name=wantedLayer,
-                                    line_color=color,
-                                    draw_style=drawstyle)
+                                    line_color=(0.0,0.0,0.0) if not color else color,
+                                    draw_style="Solid" if not drawstyle else drawstyle)
     else:
         newLayer = doc.addObject("App::DocumentObjectGroup", wantedLayer)
-    newLayer.Label = wantedLayerName
+    newLayer.Label = wantedLayer
     layers.append(newLayer)
     return newLayer
 
@@ -413,7 +367,7 @@ def calcBulge(v1, bulge, v2):
     Returns
     -------
     Base::Vector3
-        The new point betwwen `v1` and `v2`.
+        The new point between `v1` and `v2`.
     """
     chord = v2.sub(v1)
     sagitta = (bulge * chord.Length)/2
@@ -871,7 +825,7 @@ def drawLine(line, forceShape=False):
         if not DraftVecUtils.equals(v1, v2):
             try:
                 if (dxfCreateDraft or dxfCreateSketch) and (not forceShape):
-                    return Draft.makeWire([v1, v2])
+                    return Draft.make_wire([v1, v2])
                 else:
                     return Part.LineSegment(v1, v2).toShape()
             except Part.OCCError:
@@ -989,7 +943,7 @@ def drawPolyline(polyline, forceShape=False, num=None):
                     else:
                         return Part.Face(w1)
                 elif (dxfCreateDraft or dxfCreateSketch) and (not curves) and (not forceShape):
-                    ob = Draft.makeWire(verts)
+                    ob = Draft.make_wire(verts)
                     ob.Closed = polyline.closed
                     ob.Placement = placementFromDXFOCS(polyline)
                     return ob
@@ -1047,9 +1001,9 @@ def drawArc(arc, forceShape=False):
     try:
         if (dxfCreateDraft or dxfCreateSketch) and (not forceShape):
             pl = placementFromDXFOCS(arc)
-            return Draft.makeCircle(circle.Radius, pl, face=False,
-                                    startangle=firstangle,
-                                    endangle=lastangle)
+            return Draft.make_circle(circle.Radius, pl, face=False,
+                                     startangle=firstangle,
+                                     endangle=lastangle)
         else:
             return circle.toShape(math.radians(firstangle),
                                   math.radians(lastangle))
@@ -1096,7 +1050,7 @@ def drawCircle(circle, forceShape=False):
     try:
         if (dxfCreateDraft or dxfCreateSketch) and (not forceShape):
             pl = placementFromDXFOCS(circle)
-            return Draft.makeCircle(circle.radius, pl)
+            return Draft.make_circle(circle.radius, pl)
         else:
             return curve.toShape()
     except Part.OCCError:
@@ -1146,7 +1100,7 @@ def drawEllipse(ellipse, forceShape=False):
         x = majv.normalize()
         z = vec(ellipse.extrusion).normalize()
         y = z.cross(x)
-        m = DraftVecUtils.getPlaneRotation(x, y, z)
+        m = DraftVecUtils.getPlaneRotation(x, y)
         pl = FreeCAD.Placement(m)
         pl.move(c)
         if (dxfCreateDraft or dxfCreateSketch) and (not forceShape):
@@ -1155,7 +1109,7 @@ def drawEllipse(ellipse, forceShape=False):
                 shape.Placement = pl
                 return shape
             else:
-                return Draft.makeEllipse(majr, minr, pl)
+                return Draft.make_ellipse(majr, minr, pl)
         else:
             shape = el.toShape(start, end)
             shape.Placement = pl
@@ -1365,9 +1319,9 @@ def drawSplineIterpolation(verts, closed=False, forceShape=False,
     """
     if (dxfCreateDraft or dxfCreateSketch) and (not forceShape):
         if dxfDiscretizeCurves or alwaysDiscretize:
-            ob = Draft.makeWire(verts)
+            ob = Draft.make_wire(verts)
         else:
-            ob = Draft.makeBSpline(verts)
+            ob = Draft.make_bspline(verts)
         ob.Closed = closed
         return ob
     else:
@@ -1465,7 +1419,7 @@ def drawSpline(spline, forceShape=False):
     -------
     Part::Part2DObject or Part::TopoShape ('Edge', 'Face')
         The returned object is normally a `Draft BezCurve`
-        created with `Draft.makeBezCurve(controlpoints, Degree=degree)`,
+        created with `Draft.make_bezcurve(controlpoints, Degree=degree)`,
         if `forceShape` is `False` and there are no weights.
 
         Otherwise it tries to return a `Part.Shape` of type `'Wire'`,
@@ -1495,7 +1449,7 @@ def drawSpline(spline, forceShape=False):
 
     See also
     --------
-    drawBlock, Draft.makeBezCurve, Part.BezierCurve, drawSplineIterpolation,
+    drawBlock, Draft.make_bezcurve, Part.BezierCurve, drawSplineIterpolation,
     Part.BSplineCurve.buildFromPolesMultsKnots
 
     To do
@@ -1587,7 +1541,7 @@ def drawSpline(spline, forceShape=False):
             if not forceShape and weights is None:
                 points = controlpoints[:]
                 del points[degree+1::degree+1]
-                return Draft.makeBezCurve(points, Degree=degree)
+                return Draft.make_bezcurve(points, Degree=degree)
             else:
                 poles = controlpoints[:]
                 edges = []
@@ -1815,7 +1769,7 @@ def drawInsert(insert, num=None, clone=False):
             addText(a, attrib=True)
     if clone:
         if insert.block in blockobjects:
-            newob = Draft.clone(blockobjects[insert.block])
+            newob = Draft.make_clone(blockobjects[insert.block])
             tsf = FreeCAD.Matrix()
             rot = math.radians(insert.rotation)
             pos = vec(insert.loc)
@@ -1886,7 +1840,7 @@ def drawLayerBlock(objlist):
     obj = None
     if (dxfCreateDraft or dxfCreateSketch) and isObj:
         try:
-            obj = Draft.makeBlock(objlist)
+            obj = Draft.make_block(objlist)
         except Part.OCCError:
             pass
     else:
@@ -2016,7 +1970,7 @@ def addText(text, attrib=False):
 
     See also
     --------
-    locateLayer, drawBlock, Draft.makeText
+    locateLayer, drawBlock, Draft.make_text
 
     To do
     -----
@@ -2040,17 +1994,7 @@ def addText(text, attrib=False):
         else:
             name = "Text"
         val = deformat(val)
-        # the following stores text as Latin1 in annotations, which
-        # displays ok in coin texts, but causes errors later on.
-        # better store as utf8 always.
-        # try:
-        #    val = val.decode("utf8").encode("Latin1")
-        # except Exception:
-        #    try:
-        #        val = val.encode("latin1")
-        #    except Exception:
-        #        pass
-        newob = Draft.makeText(val.split("\n"))
+        newob = Draft.make_text(val.split("\n"))
         if hasattr(lay, "addObject"):
             lay.addObject(newob)
         elif hasattr(lay, "Proxy") and hasattr(lay.Proxy, "addObject"):
@@ -2234,16 +2178,16 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                     FreeCAD.ActiveDocument.recompute()
                     if dxfMakeBlocks or dxfJoin:
                         if sketch:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True,
-                                                     addTo=sketch)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True,
+                                                      addTo=sketch)
                         else:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True)
                             sketch = shape
                     else:
-                        shape = Draft.makeSketch(shape,
-                                                 autoconstraints=True)
+                        shape = Draft.make_sketch(shape,
+                                                  autoconstraints=True)
                 elif dxfJoin or getShapes:
                     if isinstance(shape, Part.Shape):
                         shapes.append(shape)
@@ -2285,16 +2229,16 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                     FreeCAD.ActiveDocument.recompute()
                     if dxfMakeBlocks or dxfJoin:
                         if sketch:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True,
-                                                     addTo=sketch)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True,
+                                                      addTo=sketch)
                         else:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True)
                             sketch = shape
                     else:
-                        shape = Draft.makeSketch(shape,
-                                                 autoconstraints=True)
+                        shape = Draft.make_sketch(shape,
+                                                  autoconstraints=True)
                 elif dxfJoin or getShapes:
                     if isinstance(shape, Part.Shape):
                         shapes.append(shape)
@@ -2320,16 +2264,16 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                     FreeCAD.ActiveDocument.recompute()
                     if dxfMakeBlocks or dxfJoin:
                         if sketch:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True,
-                                                     addTo=sketch)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True,
+                                                      addTo=sketch)
                         else:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True)
                             sketch = shape
                     else:
-                        shape = Draft.makeSketch(shape,
-                                                 autoconstraints=True)
+                        shape = Draft.make_sketch(shape,
+                                                  autoconstraints=True)
                 elif dxfJoin or getShapes:
                     if isinstance(shape, Part.Shape):
                         shapes.append(shape)
@@ -2381,16 +2325,16 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                     FreeCAD.ActiveDocument.recompute()
                     if dxfMakeBlocks or dxfJoin:
                         if sketch:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True,
-                                                     addTo=sketch)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True,
+                                                      addTo=sketch)
                         else:
-                            shape = Draft.makeSketch(shape,
-                                                     autoconstraints=True)
+                            shape = Draft.make_sketch(shape,
+                                                      autoconstraints=True)
                             sketch = shape
                     else:
-                        shape = Draft.makeSketch(shape,
-                                                 autoconstraints=True)
+                        shape = Draft.make_sketch(shape,
+                                                  autoconstraints=True)
                 elif dxfMakeBlocks:
                     addToBlock(shape, circle.layer)
                 elif getShapes:
@@ -2607,7 +2551,7 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                     shape = Part.Vertex(x, y, z)
                     addToBlock(shape, lay)
                 else:
-                    newob = Draft.makePoint(x, y, z)
+                    newob = Draft.make_point(x, y, z)
                     lay = locateLayer(lay)
                     lay.addObject(newob)
                     if gui:
@@ -2623,7 +2567,7 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
         for leader in leaders:
             if dxfImportLayouts or (not rawValue(leader, 67)):
                 points = getMultiplePoints(leader)
-                newob = Draft.makeWire(points)
+                newob = Draft.make_wire(points)
                 lay = locateLayer(rawValue(leader, 8))
                 lay.addObject(newob)
                 if gui:
@@ -2654,7 +2598,7 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
                             if gui:
                                 formatObject(newob, hatch)
                     else:
-                        newob = Draft.makeWire(points)
+                        newob = Draft.make_wire(points)
                         locateLayer(lay).addObject(newob)
                         if gui:
                             formatObject(newob, hatch)
@@ -2721,7 +2665,6 @@ def processdxf(document, filename, getShapes=False, reComputeFlag=True):
     if badobjects:
         print("dxf: ", len(badobjects), " objects were not imported")
     del doc
-    del blockshapes
 
 
 def warn(dxfobject, num=None):
@@ -2772,30 +2715,20 @@ def open(filename):
         getDXFlibs()
         if dxfReader:
             docname = os.path.splitext(os.path.basename(filename))[0]
-            if six.PY2:
-                if isinstance(docname, six.text_type):
-                    # workaround since newDocument
-                    # currently can't handle unicode filenames
-                    docname = docname.encode(sys.getfilesystemencoding())
             doc = FreeCAD.newDocument(docname)
-            doc.Label = decodeName(docname)
+            doc.Label = docname
             processdxf(doc, filename)
             return doc
         else:
             errorDXFLib(gui)
     else:
         docname = os.path.splitext(os.path.basename(filename))[0]
-        if six.PY2:
-            if isinstance(docname, six.text_type):
-                # workaround since newDocument
-                # currently can't handle unicode filenames
-                docname = docname.encode(sys.getfilesystemencoding())
         doc = FreeCAD.newDocument(docname)
-        doc.Label = decodeName(docname)
+        doc.Label = docname
         FreeCAD.setActiveDocument(doc.Name)
         import Import
         Import.readDXF(filename)
-        Draft.convertDraftTexts() # convert annotations to Draft texts
+        Draft.convert_draft_texts() # convert annotations to Draft texts
         doc.recompute()
 
 
@@ -2828,13 +2761,7 @@ def insert(filename, docname):
         getDXFlibs()
         if dxfReader:
             groupname = os.path.splitext(os.path.basename(filename))[0]
-            if six.PY2:
-                if isinstance(groupname, six.text_type):
-                    # workaround since newDocument
-                    # currently can't handle unicode filenames
-                    groupname = groupname.encode(sys.getfilesystemencoding())
             importgroup = doc.addObject("App::DocumentObjectGroup", groupname)
-            importgroup.Label = decodeName(groupname)
             processdxf(doc, filename)
             for l in layers:
                 importgroup.addObject(l)
@@ -2843,7 +2770,7 @@ def insert(filename, docname):
     else:
         import Import
         Import.readDXF(filename)
-        Draft.convertDraftTexts() # convert annotations to Draft texts
+        Draft.convert_draft_texts() # convert annotations to Draft texts
         doc.recompute()
 
 def getShapes(filename):
@@ -2877,7 +2804,7 @@ def getShapes(filename):
 def projectShape(shape, direction, tess=None):
     """Project shape in a given direction.
 
-    It uses `Drawing.projectEx(shape, direction)`
+    It uses `TechDraw.projectEx(shape, direction)`
     to return a list with all the parts of the projection.
     The first five elements are added to a list of edges,
     which are then put in a `Part.Compound`.
@@ -2908,12 +2835,12 @@ def projectShape(shape, direction, tess=None):
 
     See also
     --------
-    Drawing.projectEx, DraftGeomUtils.cleanProjection
+    TechDraw.projectEx, DraftGeomUtils.cleanProjection
     """
-    import Drawing
+    import TechDraw
     edges = []
     try:
-        groups = Drawing.projectEx(shape, direction)
+        groups = TechDraw.projectEx(shape, direction)
     except Part.OCCError:
         print("unable to project shape on direction ", direction)
         return shape
@@ -3009,7 +2936,7 @@ def getSplineSegs(edge):
         It returns the point in `edge.FirstParameter`,
         all the intermediate points, and the point in `edge.LastParameter`.
 
-        If the `segmentlenth` variable is zero in the parameters database,
+        If the `segmentlength` variable is zero in the parameters database,
         then it only returns the first and the last point of the `edge`.
     """
     params = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft")
@@ -3510,46 +3437,8 @@ def getStrGroup(ob):
     str
         The name of the layer in capital letters,
         as the DXF R12 format seems to favor this style.
-        ::
-            return getStr(getGroup(ob)).upper()
-
-        By calling `getStr()`, we make sure the layer has a valid
-        utf8 or ascii name.
     """
-    return getStr(getGroup(ob)).upper()
-
-
-def getStr(l):
-    """Return a string that is valid in both Python 2 and 3.
-
-    If Python 2 is used, it tries to encode the string into ascii,
-    replacing characters as necessary, for example,
-    accented characters.
-
-    Parameters
-    ----------
-    l : str
-        Any string either in Python 2 or 3.
-
-    Returns
-    -------
-    str
-        The same `l` string if Python 3,
-        or ascii encoded if Python 2 is used.
-    """
-    if six.PY2:
-        if isinstance(l, six.text_type):
-            # dxf R12 files are rather over-sensitive with utf8...
-            try:
-                import unicodedata
-            except Exception:
-                # fallback
-                return l.encode("ascii", errors="replace")
-            else:
-                # better encoding, replaces accented latin characters
-                # with corresponding ascii letter
-                return ''.join((c for c in unicodedata.normalize('NFD', l) if unicodedata.category(c) != 'Mn')).encode("ascii", errors="replace")
-    return l
+    return getGroup(ob).upper()
 
 
 def export(objectslist, filename, nospline=False, lwPoly=False):
@@ -3584,9 +3473,8 @@ def export(objectslist, filename, nospline=False, lwPoly=False):
         it will use its `getDXF()` method to provide the DXF information
         to write into `filename`.
 
-        If the list only contains a `'Drawing::FeaturePage'`
-        or a `'TechDraw::DrawPage'` object it will use `exportPage()`
-        to produce the DXF file.
+        If the list only contains a `'TechDraw::DrawPage'` object it will use
+        `exportPage()` to produce the DXF file.
 
     filename : str
         The path of the new DXF file.
@@ -3654,10 +3542,6 @@ def export(objectslist, filename, nospline=False, lwPoly=False):
                 f.write(dxf)
                 f.close()
 
-        elif (len(exportList) == 1) and (exportList[0].isDerivedFrom("Drawing::FeaturePage")):
-            # page: special hack-export! (see below)
-            exportPage(exportList[0], filename)
-
         elif (len(exportList) == 1) and (exportList[0].isDerivedFrom("TechDraw::DrawPage")):
             # page: special hack-export! (see below)
             exportPage(exportList[0], filename)
@@ -3679,9 +3563,9 @@ def export(objectslist, filename, nospline=False, lwPoly=False):
                             ltype = 'HIDDEN'
                         elif ob.ViewObject.DrawStyle == "Dashdot":
                             ltype = 'DASHDOT'
-                    # print("exporting layer:", getStr(ob.Label),
+                    # print("exporting layer:", ob.Label,
                     #       getACI(ob), ltype)
-                    dxf.layers.append(dxfLibrary.Layer(name=getStr(ob.Label),
+                    dxf.layers.append(dxfLibrary.Layer(name=ob.Label,
                                                        color=getACI(ob),
                                                        lineType=ltype))
 
@@ -3887,9 +3771,6 @@ def export(objectslist, filename, nospline=False, lwPoly=False):
                                                     color=getACI(ob),
                                                     layer=getStrGroup(ob)))
 
-            if six.PY2:
-                if isinstance(filename, six.text_type):
-                    filename = filename.encode("utf8")
             dxf.saveas(filename)
 
         FCC.PrintMessage("successfully exported" + " " + filename + "\n")
@@ -3931,8 +3812,8 @@ def exportPage(page, filename):
 
     Parameters
     ----------
-    page : object derived from 'Drawing::FeaturePage' or 'TechDraw::DrawPage'
-        A Drawing or TechDraw page to export.
+    page : object derived from 'TechDraw::DrawPage'
+        A TechDraw page to export.
 
     filename : str
         The path of the new DXF file.
@@ -4010,9 +3891,8 @@ def getViewBlock(geom, view, blockcount):
         the `getDXF()` method of the `view`.
 
     view : page view
-        A Drawing or TechDraw view which may be of different types
+        A TechDraw view which may be of different types
         depending on the objects being projected:
-        ``'Drawing::FeatureViewPython'`,
         `'TechDraw::DrawViewDraft'`, or `'TechDraw::DrawViewArch'`.
 
     blockcount : int
@@ -4050,7 +3930,7 @@ def getViewBlock(geom, view, blockcount):
             block += "0\nENDBLK\n5\n_handle_\n100\nAcDbEntity\n8\n0\n100\nAcDbBlockEnd\n"
             insert += "0\nINSERT\n5\n_handle_\n8\n0\n6\nBYLAYER\n62\n256\n2\n"
             insert += view.Name + str(blockcount)
-            insert += "\n10\n" + str(view.X) + "\n20\n" + str(-view.Y)
+            insert += "\n10\n" + str(view.X) + "\n20\n" + str(view.Y)
             insert += "\n30\n0\n41\n" + str(view.Scale) + "\n42\n" + str(view.Scale) + "\n43\n" + str(view.Scale)
             insert += "\n50\n" + str(r) + "\n"
             blockcount += 1
@@ -4061,8 +3941,8 @@ def getViewBlock(geom, view, blockcount):
     return block, insert, blockcount
 
 
-def getViewDXF(view, blocks=True):
-    """Return a DXF fragment from a Drawing view.
+def getViewDXF(view):
+    """Return a DXF fragment from a TechDraw view.
 
     Depending on the type of page view, it will try
     obtaining `geom`, the DXF representation of `view`,
@@ -4070,12 +3950,7 @@ def getViewDXF(view, blocks=True):
     with `getViewBlock(geom, view, blockcount)`,
     starting with a `blockcount` of 1.
 
-    If `view` is a group (`'App::DocumentObjectGroup'`)
-    it will recursively call itself in a loop `getViewDXF(child)`,
-    where `child` is a view contained in `view.Group`,
-    until all children are processed.
-
-    If the `view` is `'Drawing::FeatureViewPart'`,
+    If the `view` is `'TechDraw::DrawViewPart'`,
     and if the global variable `dxfExportBlocks` exists, it will create
     the appropriate strings for `BLOCK` and `INSERT` sections,
     and increment the `blockcount`.
@@ -4085,14 +3960,10 @@ def getViewDXF(view, blocks=True):
     Parameters
     ----------
     view : App::DocumentObjectGroup or page view
-        A Drawing or TechDraw view which may be of different types
+        A TechDraw view which may be of different types
         depending on the objects being projected:
-        `'Drawing::FeatureViewPython'`,
         `'TechDraw::DrawViewDraft'`, `'TechDraw::DrawViewArch'`,
-        `'Drawing::FeatureViewPart'`, `'Drawing::FeatureViewAnnotation'`
-
-    blocks : bool, optional
-        It defaults to `True`. Not used?
+        `'TechDraw::DrawViewPart'`, `'TechDraw::DrawViewAnnotation'`
 
     Returns
     -------
@@ -4107,19 +3978,8 @@ def getViewDXF(view, blocks=True):
     insert = ""
     blockcount = 1
 
-    if view.isDerivedFrom("App::DocumentObjectGroup"):
-        for child in view.Group:
-            b, e = getViewDXF(child)
-            block += b
-            insert += e
-
-    elif view.isDerivedFrom("Drawing::FeatureViewPython"):
-        if hasattr(view.Proxy, "getDXF"):
-            geom = view.Proxy.getDXF(view)
-            block, insert, blockcount = getViewBlock(geom, view, blockcount)
-
-    elif view.isDerivedFrom("TechDraw::DrawViewDraft"):
-        geom = Draft.getDXF(view)
+    if view.isDerivedFrom("TechDraw::DrawViewDraft"):
+        geom = Draft.get_dxf(view)
         block, insert, blockcount = getViewBlock(geom, view, blockcount)
 
     elif view.isDerivedFrom("TechDraw::DrawViewArch"):
@@ -4127,77 +3987,41 @@ def getViewDXF(view, blocks=True):
         geom = ArchSectionPlane.getDXF(view)
         block, insert, blockcount = getViewBlock(geom, view, blockcount)
 
-    elif view.isDerivedFrom("Drawing::FeatureViewPart"):
-        r = view.Rotation
-        if r != 0:
-            r = -r  # fix rotation direction
-        import Drawing
-        proj = Drawing.projectToDXF(view.Source.Shape, view.Direction)
-        if dxfExportBlocks:
-            # change layer and set color and ltype to BYBLOCK (0)
-            proj = proj.replace("sheet_layer\n",
-                                "0\n6\nBYBLOCK\n62\n0\n5\n_handle_\n")
-            block = "0\nBLOCK\n5\n_handle_\n100\nAcDbEntity\n8\n0\n100\nAcDbBlockBegin\n2\n"
-            block += view.Name + str(blockcount)
-            block += "\n70\n0\n10\n0\n20\n0\n3\n" + view.Name + str(blockcount)
-            block += "\n1\n\n"
-            block += proj
-            block += "0\nENDBLK\n5\n_handle_\n100\nAcDbEntity\n8\n0\n100\nAcDbBlockEnd\n"
-            insert += "0\nINSERT\n5\n_handle_\n8\n0\n6\nBYLAYER\n62\n256\n2\n"
-            insert += view.Name + str(blockcount)
-            insert += "\n10\n" + str(view.X) + "\n20\n" + str(-view.Y)
-            insert += "\n30\n0\n41\n" + str(view.Scale)
-            insert += "\n42\n" + str(view.Scale) + "\n43\n" + str(view.Scale)
-            insert += "\n50\n" + str(r) + "\n"
-            blockcount += 1
-        else:
-            proj = proj.replace("sheet_layer\n", "0\n5\n_handle_\n")
-            insert += proj
+    elif view.isDerivedFrom("TechDraw::DrawViewPart"):
+        import TechDraw
+        for obj in view.Source:
+            proj = TechDraw.projectToDXF(obj.Shape, view.Direction)
+            if dxfExportBlocks:
+                # change layer and set color and ltype to BYBLOCK (0)
+                proj = proj.replace("sheet_layer\n",
+                                    "0\n6\nBYBLOCK\n62\n0\n5\n_handle_\n")
+                block += "0\nBLOCK\n5\n_handle_\n100\nAcDbEntity\n8\n0\n100\nAcDbBlockBegin\n2\n"
+                block += view.Name + str(blockcount)
+                block += "\n70\n0\n10\n0\n20\n0\n3\n" + view.Name + str(blockcount)
+                block += "\n1\n\n"
+                block += proj
+                block += "0\nENDBLK\n5\n_handle_\n100\nAcDbEntity\n8\n0\n100\nAcDbBlockEnd\n"
+                insert += "0\nINSERT\n5\n_handle_\n8\n0\n6\nBYLAYER\n62\n256\n2\n"
+                insert += view.Name + str(blockcount)
+                insert += "\n10\n" + str(view.X) + "\n20\n" + str(view.Y)
+                insert += "\n30\n0\n41\n" + str(view.Scale)
+                insert += "\n42\n" + str(view.Scale) + "\n43\n" + str(view.Scale)
+                insert += "\n50\n" + str(view.Rotation) + "\n"
+                blockcount += 1
+            else:
+                proj = proj.replace("sheet_layer\n", "0\n5\n_handle_\n")
+                insert += proj # view.Rotation is ignored
 
-    elif view.isDerivedFrom("Drawing::FeatureViewAnnotation"):
-        r = view.Rotation
-        if r != 0:
-            r = -r  # fix rotation direction
+    elif view.isDerivedFrom("TechDraw::DrawViewAnnotation"):
         insert = "0\nTEXT\n5\n_handle_\n8\n0\n100\nAcDbEntity\n100\nAcDbText\n5\n_handle_"
-        insert += "\n10\n" + str(view.X) + "\n20\n" + str(-view.Y)
+        insert += "\n10\n" + str(view.X) + "\n20\n" + str(view.Y)
         insert += "\n30\n0\n40\n" + str(view.Scale/2)
-        insert += "\n50\n" + str(r)
+        insert += "\n50\n" + str(view.Rotation)
         insert += "\n1\n" + view.Text[0] + "\n"
 
     else:
         print("Unable to get DXF representation from view: ", view.Label)
     return block, insert
-
-
-def exportPageLegacy(page, filename):
-    """Export a page created with Drawing or TechDraw workbenches. DEPRECATED.
-
-    It uses the `importSVG` module to import the SVG information of `page`
-    into a temporary document, then the objects of this document
-    are used with the exporter to produce the DXF file,
-    and the temporary document is closed.
-    ::
-        temp = importSVG.open(page.PageResult)
-        export(temp.Objects, filename, nospline=True, lwPoly=false)
-        App.closeDocument(temp.Name)
-
-    Parameters
-    ----------
-    page : object derived from 'Drawing::FeaturePage' or 'TechDraw::DrawPage'
-        A Drawing or TechDraw page to export.
-
-    filename : str
-        The path of the new DXF file.
-
-    See also
-    --------
-    exportPage, export, importSVG.open
-    """
-    import importSVG
-    tempdoc = importSVG.open(page.PageResult)
-    tempobj = tempdoc.Objects
-    export(tempobj, filename, nospline=True, lwPoly=False)
-    FreeCAD.closeDocument(tempdoc.Name)
 
 
 def readPreferences():

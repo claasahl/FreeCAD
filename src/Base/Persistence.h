@@ -24,18 +24,23 @@
 #ifndef APP_PERSISTENCE_H
 #define APP_PERSISTENCE_H
 
-// Std. configurations
-
-
-#include <assert.h>
-
 #include "BaseClass.h"
+
+#include <xercesc/util/XercesDefs.hpp>
+
+XERCES_CPP_NAMESPACE_BEGIN
+	class DOMNode;
+	class DOMElement;
+//    class DefaultHandler;
+//    class SAX2XMLReader;
+XERCES_CPP_NAMESPACE_END
 
 namespace Base
 {
 class Reader;
 class Writer;
 class XMLReader;
+class DocumentReader;
 
 /// Persistence class and root of the type system
 class BaseExport Persistence : public BaseClass
@@ -48,7 +53,7 @@ public:
      * It is not meant to have the exact size, it is more or less an estimation
      * which runs fast! Is it two bytes or a GB?
      */
-    virtual unsigned int getMemSize (void) const = 0;
+    virtual unsigned int getMemSize () const = 0;
     /** This method is used to save properties to an XML document.
      * A good example you'll find in PropertyStandard.cpp, e.g. the vector:
      * \code
@@ -82,6 +87,9 @@ public:
      * \endcode
      */
     virtual void Restore(XMLReader &/*reader*/) = 0;
+    virtual void Restore(DocumentReader &/*reader*/);
+    virtual void Restore(DocumentReader &/*reader*/,XERCES_CPP_NAMESPACE_QUALIFIER DOMElement */*containerEl*/);
+    
     /** This method is used to save large amounts of data to a binary file.
      * Sometimes it makes no sense to write property data as XML. In case the
      * amount of data is too big or the data type has a more effective way to
@@ -146,6 +154,8 @@ public:
      * @see Base::Reader,Base::XMLReader
      */
     virtual void RestoreDocFile(Reader &/*reader*/);
+    
+    
     /// Encodes an attribute upon saving.
     static std::string encodeAttribute(const std::string&);
 

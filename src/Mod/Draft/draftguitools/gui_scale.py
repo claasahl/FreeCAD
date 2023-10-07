@@ -27,7 +27,7 @@
 The scale operation can also be done with subelements.
 
 The subelements operations only really work with polylines (Wires)
-because internally the functions `scaleVertex` and `scaleEdge`
+because internally the functions `scale_vertex` and `scale_edge`
 only work with polylines that have a `Points` property.
 """
 ## @package gui_scale
@@ -73,7 +73,7 @@ class Scale(gui_base_original.Modifier):
 
     def Activated(self):
         """Execute when the command is called."""
-        super(Scale, self).Activated(name="Scale")
+        super().Activated(name="Scale")
         if not self.ui:
             return
         self.ghosts = []
@@ -99,7 +99,7 @@ class Scale(gui_base_original.Modifier):
         self.selected_subelements = Gui.Selection.getSelectionEx()
         self.refs = []
         self.ui.pointUi(title=translate("draft",self.featureName), icon="Draft_Scale")
-        self.ui.modUi()
+        self.ui.isRelative.hide()
         self.ui.xValue.setFocus()
         self.ui.xValue.selectAll()
         self.pickmode = False
@@ -108,19 +108,25 @@ class Scale(gui_base_original.Modifier):
         _msg(translate("draft", "Pick base point"))
 
     def set_ghosts(self):
-        """Set the previews of the objects to scale."""
-        if self.ui.isSubelementMode.isChecked():
-            return self.set_subelement_ghosts()
-        self.ghosts = [trackers.ghostTracker(self.selected_objects)]
+        """Set the ghost to display."""
+        for ghost in self.ghosts:
+            ghost.remove()
+        if self.task and self.task.isSubelementMode.isChecked():
+            self.ghosts = self.get_subelement_ghosts()
+        else:
+            self.ghosts = [trackers.ghostTracker(self.selected_objects)]
 
-    def set_subelement_ghosts(self):
-        """Set the previews of the subelements from an object to scale."""
+    def get_subelement_ghosts(self):
+        """Get ghost for the subelements (vertices, edges)."""
         import Part
 
-        for object in self.selected_subelements:
-            for subelement in object.SubObjects:
-                if isinstance(subelement, (Part.Vertex, Part.Edge)):
-                    self.ghosts.append(trackers.ghostTracker(subelement))
+        ghosts = []
+        for sel in Gui.Selection.getSelectionEx("", 0):
+            for sub in sel.SubElementNames if sel.SubElementNames else [""]:
+                if "Vertex" in sub or "Edge" in sub:
+                    shape = Part.getShape(sel.Object, sub, needSubElement=True, retType=0)
+                    ghosts.append(trackers.ghostTracker(shape))
+        return ghosts
 
     def pickRef(self):
         """Pick a point of reference."""
@@ -155,8 +161,7 @@ class Scale(gui_base_original.Modifier):
         """Handle the mouse event of movement."""
         for ghost in self.ghosts:
             ghost.off()
-        (self.point,
-         ctrlPoint, info) = gui_tool_utils.getPoint(self, arg, sym=True)
+        self.point, ctrlPoint, info = gui_tool_utils.getPoint(self, arg)
 
     def handle_mouse_click_event(self):
         """Handle the mouse click event."""
@@ -185,12 +190,12 @@ class Scale(gui_base_original.Modifier):
         """Scale only the subelements if the appropriate option is set.
 
         The subelements operations only really work with polylines (Wires)
-        because internally the functions `scaleVertex` and `scaleEdge`
+        because internally the functions `scale_vertex` and `scale_edge`
         only work with polylines that have a `Points` property.
 
         BUG: the code should not cause an error. It should check that
         the selected object is not a rectangle or another object
-        that can't be used with `scaleVertex` and `scaleEdge`.
+        that can't be used with `scale_vertex` and `scale_edge`.
         """
         Gui.addModule("Draft")
         try:
@@ -206,7 +211,7 @@ class Scale(gui_base_original.Modifier):
     def scale_with_clone(self):
         """Scale with clone."""
         if self.task.relative.isChecked():
-            self.delta = App.DraftWorkingPlane.getGlobalCoords(self.delta)
+            self.delta = self.wp.getGlobalCoords(self.delta)
 
         Gui.addModule("Draft")
 
@@ -232,7 +237,7 @@ class Scale(gui_base_original.Modifier):
         str_delta = DraftVecUtils.toString(self.delta)
         str_delta_corr = DraftVecUtils.toString(App.Vector(1,1,1) - self.delta)
 
-        _cmd = 'Draft.clone'
+        _cmd = 'Draft.make_clone'
         _cmd += '('
         _cmd += objects + ', '
         _cmd += 'forcedraft=True'
@@ -266,7 +271,7 @@ class Scale(gui_base_original.Modifier):
                 _cmd += ']'
                 arguments.append(_cmd)
         all_args = ', '.join(arguments)
-        command.append('Draft.copyScaledEdges([' + all_args + '])')
+        command.append('Draft.copy_scaled_edges([' + all_args + '])')
         command.append('FreeCAD.ActiveDocument.recompute()')
         return command
 
@@ -281,7 +286,7 @@ class Scale(gui_base_original.Modifier):
             for index, subelement in enumerate(obj.SubObjects):
                 if isinstance(subelement, Part.Vertex):
                     _vertex_index = int(obj.SubElementNames[index][V:]) - 1
-                    _cmd = 'Draft.scaleVertex'
+                    _cmd = 'Draft.scale_vertex'
                     _cmd += '('
                     _cmd += 'FreeCAD.ActiveDocument.'
                     _cmd += obj.ObjectName + ', '
@@ -292,7 +297,7 @@ class Scale(gui_base_original.Modifier):
                     command.append(_cmd)
                 elif isinstance(subelement, Part.Edge):
                     _edge_index = int(obj.SubElementNames[index][E:]) - 1
-                    _cmd = 'Draft.scaleEdge'
+                    _cmd = 'Draft.scale_edge'
                     _cmd += '('
                     _cmd += 'FreeCAD.ActiveDocument.'
                     _cmd += obj.ObjectName + ', '
@@ -320,7 +325,7 @@ class Scale(gui_base_original.Modifier):
     def scale_object(self):
         """Scale the object."""
         if self.task.relative.isChecked():
-            self.delta = App.DraftWorkingPlane.getGlobalCoords(self.delta)
+            self.delta =self.wp.getGlobalCoords(self.delta)
         goods = []
         bads = []
         for obj in self.selected_objects:
@@ -366,7 +371,7 @@ class Scale(gui_base_original.Modifier):
         """Scale the preview of the object."""
         delta = App.Vector(x, y, z)
         if rel:
-            delta = App.DraftWorkingPlane.getGlobalCoords(delta)
+            delta = self.wp.getGlobalCoords(delta)
         for ghost in self.ghosts:
             ghost.scale(delta)
         # calculate a correction factor depending on the scaling center
@@ -413,9 +418,9 @@ class Scale(gui_base_original.Modifier):
                     self.task.lock.setChecked(True)
                     self.task.setValue(d2/d1)
 
-    def finish(self, closed=False, cont=False):
+    def finish(self, cont=False):
         """Terminate the operation."""
-        super(Scale, self).finish()
+        super().finish()
         for ghost in self.ghosts:
             ghost.finalize()
 

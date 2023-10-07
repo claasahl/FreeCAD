@@ -123,14 +123,12 @@ void PreferencePack::applyConfigChanges() const
 {
     auto configFile = _path / (_metadata.name() + ".cfg");
     if (fs::exists(configFile)) {
-        ParameterManager newParameters;
-        newParameters.LoadDocument(configFile.string().c_str());
+        auto newParameters = ParameterManager::Create();
+        newParameters->LoadDocument(configFile.string().c_str());
         auto baseAppGroup = App::GetApplication().GetUserParameter().GetGroup("BaseApp");
-        newParameters.GetGroup("BaseApp")->insertTo(baseAppGroup);
+        newParameters->GetGroup("BaseApp")->insertTo(baseAppGroup);
     }
 }
-
-
 
 PreferencePackManager::PreferencePackManager()
 {
@@ -149,6 +147,7 @@ PreferencePackManager::PreferencePackManager()
 void PreferencePackManager::rescan()
 {
     std::lock_guard<std::mutex> lock(_mutex);
+    _preferencePacks.clear();
     for (const auto& path : _preferencePackPaths) {
         if (fs::exists(path) && fs::is_directory(path)) {
             FindPreferencePacksInPackage(path);
@@ -161,17 +160,92 @@ void PreferencePackManager::rescan()
     }
 }
 
-void Gui::PreferencePackManager::FindPreferencePacksInPackage(const fs::path& mod)
+void Gui::PreferencePackManager::AddPackToMetadata(const std::string &packName) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto savedPreferencePacksDirectory =
+        fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks";
+    fs::path preferencePackDirectory(savedPreferencePacksDirectory / packName);
+    if (fs::exists(preferencePackDirectory) && !fs::is_directory(preferencePackDirectory))
+        throw std::runtime_error("Cannot create " + savedPreferencePacksDirectory.string()
+                                 + ": file with that name exists already");
+
+    if (!fs::exists(preferencePackDirectory)) fs::create_directories(preferencePackDirectory);
+
+    // Create or update the saved user preferencePacks package.xml metadata file
+    std::unique_ptr<App::Metadata> metadata;
+    if (fs::exists(savedPreferencePacksDirectory / "package.xml")) {
+        metadata = std::make_unique<App::Metadata>(savedPreferencePacksDirectory / "package.xml");
+    }
+    else {
+        metadata = std::make_unique<App::Metadata>();
+        metadata->setName("User-Saved Preference Packs");
+        std::stringstream str;
+        str << "Generated automatically -- edits may be lost when saving new preference packs. To "
+            << "distribute one or more of these packs:\n"
+            << "    1) copy the entire SavedPreferencePacks directory to a convenient location,\n"
+            << "    2) rename the directory (usually to the name of the preference pack you are "
+            << "distributing),\n"
+            << "    3) delete any subfolders containing packs you don't want to distribute,\n"
+            << "    4) use git to initialize the directory as a git repository,\n"
+            << "    5) push it to a remote git host,\n"
+            << "    6) activate Developer Mode in the Addon Manager,\n"
+            << "    7) use Developer Tools in the Addon Manager to update the metadata file,\n"
+            << "    8) add, commit, and push the updated package.xml file,\n"
+            << "    9) add your remote host to the custom repositories list in the Addon Manager"
+            << " preferences,\n"
+            << "   10) use the Addon Manager to install your preference pack locally for testing.";
+        metadata->setDescription(str.str());
+        metadata->addLicense(App::Meta::License("All Rights Reserved", fs::path()));
+    }
+    for (const auto &item : metadata->content()) {
+        if (item.first == "preferencepack") {
+            if (item.second.name() == packName) {
+                // A pack with this name exists already, bail out
+                return;
+            }
+        }
+    }
+    App::Metadata newPreferencePackMetadata;
+    newPreferencePackMetadata.setName(packName);
+
+    metadata->addContentItem("preferencepack", newPreferencePackMetadata);
+    metadata->write(savedPreferencePacksDirectory / "package.xml");
+}
+
+void Gui::PreferencePackManager::importConfig(const std::string& packName,
+    const boost::filesystem::path& path)
+{
+    AddPackToMetadata(packName);
+
+    auto savedPreferencePacksDirectory =
+        fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks";
+    auto cfgFilename = savedPreferencePacksDirectory / packName / (packName + ".cfg");
+    fs::copy_file(path, cfgFilename, fs::copy_option::overwrite_if_exists);
+    rescan();
+}
+
+void Gui::PreferencePackManager::FindPreferencePacksInPackage(const fs::path &mod)
 {
     auto packageMetadataFile = mod / "package.xml";
+    static const auto modDirectory = fs::path(App::Application::getUserAppDataDir()) / "Mod" / "SavedPreferencePacks";
+    static const auto resourcePath = fs::path(App::Application::getResourceDir()) / "Gui" / "PreferencePacks";
+
     if (fs::exists(packageMetadataFile) && fs::is_regular_file(packageMetadataFile)) {
         try {
             App::Metadata metadata(packageMetadataFile);
             auto content = metadata.content();
+            auto basename = mod.filename().string();
+            if (mod == modDirectory)
+                basename = "##USER_SAVED##";
+            else if (mod == resourcePath)
+                basename = "##BUILT_IN##";
             for (const auto& item : content) {
                 if (item.first == "preferencepack") {
-                    PreferencePack newPreferencePack(mod / item.second.name(), item.second);
-                    _preferencePacks.insert(std::make_pair(newPreferencePack.name(), newPreferencePack));
+                    if (isVisible(basename, item.second.name())) {
+                        PreferencePack newPreferencePack(mod / item.second.name(), item.second);
+                        _preferencePacks.insert(std::make_pair(newPreferencePack.name(), newPreferencePack));
+                    }
                 }
             }
         }
@@ -218,6 +292,77 @@ bool PreferencePackManager::apply(const std::string& preferencePackName) const
     else {
         throw std::runtime_error("No such Preference Pack: " + preferencePackName);
     }
+}
+
+std::string findUnusedName(const std::string &basename, ParameterGrp::handle parent)
+{
+    int i = 1;
+    while (true) {
+        std::ostringstream nameToTest;
+        nameToTest << basename << "_" << i;
+        if (!parent->HasGroup(nameToTest.str().c_str()))
+            return nameToTest.str();
+        ++i;
+    }
+}
+
+bool PreferencePackManager::isVisible(const std::string& addonName, const std::string& preferencePackName) const
+{
+    if (addonName.empty() || preferencePackName.empty())
+        return true;
+
+    auto pref = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/General/HiddenPreferencePacks");
+    auto hiddenPacks = pref->GetGroups();
+    auto hiddenPack = std::find_if(hiddenPacks.begin(), hiddenPacks.end(), [addonName, preferencePackName](ParameterGrp::handle handle) {
+        return (handle->GetASCII("addonName", "") == addonName) && (handle->GetASCII("preferencePackName", "") == preferencePackName);
+        });
+    if (hiddenPack == hiddenPacks.end())
+        return true;
+    else
+        return false;
+}
+
+void PreferencePackManager::toggleVisibility(const std::string& addonName, const std::string& preferencePackName)
+{
+    if (preferencePackName.empty())
+        return;
+    auto pref = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/General/HiddenPreferencePacks");
+    auto hiddenPacks = pref->GetGroups();
+    auto hiddenPack = std::find_if(hiddenPacks.begin(), hiddenPacks.end(), [addonName,preferencePackName](ParameterGrp::handle handle) {
+        return (handle->GetASCII("addonName", "") == addonName) && (handle->GetASCII("preferencePackName", "") == preferencePackName);
+        });
+    if (hiddenPack == hiddenPacks.end()) {
+        auto name = findUnusedName("PreferencePack", pref);
+        auto group = pref->GetGroup(name.c_str());
+        group->SetASCII("addonName", addonName.c_str());
+        group->SetASCII("preferencePackName", preferencePackName.c_str());
+    }
+    else {
+        auto groupName = (*hiddenPack)->GetGroupName();
+        hiddenPacks.clear(); // To decrement the reference count of the group we are about the remove...
+        pref->RemoveGrp(groupName);
+    }
+    rescan();
+}
+
+void Gui::PreferencePackManager::deleteUserPack(const std::string& name)
+{
+    if (name.empty())
+        return;
+    auto savedPreferencePacksDirectory = fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks";
+    auto savedPath = savedPreferencePacksDirectory / name;
+    std::unique_ptr<App::Metadata> metadata;
+    if (fs::exists(savedPreferencePacksDirectory / "package.xml")) {
+        metadata = std::make_unique<App::Metadata>(savedPreferencePacksDirectory / "package.xml");
+    }
+    else {
+        throw std::runtime_error("Lost the user-saved preference packs metadata file!");
+    }
+    metadata->removeContentItem("preferencepack", name);
+    metadata->write(savedPreferencePacksDirectory / "package.xml");
+    if (fs::exists(savedPath))
+        fs::remove_all(savedPath);
+    rescan();
 }
 
 void copyTemplateParameters(Base::Reference<ParameterGrp> templateGroup, const std::string& path, Base::Reference<ParameterGrp> outputGroup)
@@ -286,48 +431,20 @@ void PreferencePackManager::save(const std::string& name, const std::vector<Temp
     if (templates.empty())
         return;
 
-    std::lock_guard<std::mutex> lock(_mutex);
-    auto savedPreferencePacksDirectory = fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks";
-    fs::path preferencePackDirectory(savedPreferencePacksDirectory / name);
-    if (fs::exists(preferencePackDirectory) && !fs::is_directory(preferencePackDirectory))
-        throw std::runtime_error("Cannot create " + savedPreferencePacksDirectory.string() + ": file with that name exists already");
-
-    if (!fs::exists(preferencePackDirectory))
-        fs::create_directories(preferencePackDirectory);
-
-    // Create or update the saved user preferencePacks package.xml metadata file
-    std::unique_ptr<App::Metadata> metadata;
-    if (fs::exists(savedPreferencePacksDirectory / "package.xml")) {
-        metadata = std::make_unique<App::Metadata>(savedPreferencePacksDirectory / "package.xml");
-    }
-    else {
-        // Create and set all of the required metadata to make it easier for PreferencePack authors to copy this
-        // file into their preferencePack distributions.
-        metadata = std::make_unique<App::Metadata>();
-        metadata->setName("User-Saved PreferencePacks");
-        metadata->setDescription("Generated automatically -- edits may be lost when saving new preferencePacks");
-        metadata->setVersion(1);
-        metadata->addMaintainer(App::Meta::Contact("No Maintainer", "email@freecadweb.org"));
-        metadata->addLicense(App::Meta::License("(Unspecified)", "(Unspecified)"));
-        metadata->addUrl(App::Meta::Url("https://github.com/FreeCAD/FreeCAD", App::Meta::UrlType::repository));
-    }
-    App::Metadata newPreferencePackMetadata;
-    newPreferencePackMetadata.setName(name);
-    newPreferencePackMetadata.setVersion(1);
-
-    metadata->addContentItem("preferencepack", newPreferencePackMetadata);
-    metadata->write(savedPreferencePacksDirectory / "package.xml");
+    AddPackToMetadata(name);
 
     // Create the config file
-    ParameterManager outputParameterManager;
-    outputParameterManager.CreateDocument();
+    auto outputParameterManager = ParameterManager::Create();
+    outputParameterManager->CreateDocument();
     for (const auto& t : templates) {
-        ParameterManager templateParameterManager;
-        templateParameterManager.LoadDocument(t.path.string().c_str());
-        copyTemplateParameters(templateParameterManager, outputParameterManager);
+        auto templateParameterManager = ParameterManager::Create();
+        templateParameterManager->LoadDocument(t.path.string().c_str());
+        copyTemplateParameters(*templateParameterManager, *outputParameterManager);
     }
+    auto savedPreferencePacksDirectory =
+        fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks";
     auto cfgFilename = savedPreferencePacksDirectory / name / (name + ".cfg");
-    outputParameterManager.SaveDocument(cfgFilename.string().c_str());
+    outputParameterManager->SaveDocument(cfgFilename.string().c_str());
 }
 
 // Needed until we support only C++20 and above and can use std::string's built-in ends_with()
@@ -444,4 +561,16 @@ void Gui::PreferencePackManager::DeleteOldBackups() const
             }
         }
     }
+}
+
+std::vector<boost::filesystem::path> Gui::PreferencePackManager::configBackups() const
+{
+    std::vector<boost::filesystem::path> results;
+    auto backupDirectory = fs::path(App::Application::getUserAppDataDir()) / "SavedPreferencePacks" / "Backups";
+    if (fs::exists(backupDirectory) && fs::is_directory(backupDirectory)) {
+        for (const auto& backup : fs::directory_iterator(backupDirectory)) {
+            results.push_back(backup);
+        }
+    }
+    return results;
 }

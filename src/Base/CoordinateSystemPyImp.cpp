@@ -22,20 +22,20 @@
 
 #include "PreCompiled.h"
 
-#include "CoordinateSystem.h"
+#include "AxisPy.h"
+#include "CoordinateSystemPy.h"
+#include "CoordinateSystemPy.cpp"
 #include "GeometryPyCXX.h"
-#include <Base/CoordinateSystemPy.h>
-#include <Base/AxisPy.h>
-#include <Base/PlacementPy.h>
-#include <Base/VectorPy.h>
-#include <Base/CoordinateSystemPy.cpp>
+#include "PlacementPy.h"
+#include "VectorPy.h"
+
 
 using namespace Base;
 
 // returns a string which represents the object e.g. when printed in python
-std::string CoordinateSystemPy::representation(void) const
+std::string CoordinateSystemPy::representation() const
 {
-    return std::string("<CoordinateSystem object>");
+    return {"<CoordinateSystem object>"};
 }
 
 PyObject *CoordinateSystemPy::PyMake(struct _typeobject *, PyObject *, PyObject *)  // Python wrapper
@@ -52,7 +52,7 @@ int CoordinateSystemPy::PyInit(PyObject* /*args*/, PyObject* /*kwd*/)
 
 PyObject* CoordinateSystemPy::setAxes(PyObject * args)
 {
-    PyObject *axis, *xdir;
+    PyObject *axis{}, *xdir{};
     if (PyArg_ParseTuple(args, "O!O!", &(AxisPy::Type), &axis, &(VectorPy::Type), &xdir)) {
         getCoordinateSystemPtr()->setAxes(*static_cast<AxisPy*>(axis)->getAxisPtr(),
                                           *static_cast<VectorPy*>(xdir)->getVectorPtr());
@@ -67,14 +67,14 @@ PyObject* CoordinateSystemPy::setAxes(PyObject * args)
     }
 
     PyErr_SetString(PyExc_TypeError, "Axis and Vector or Vector and Vector expected");
-    return 0;
+    return nullptr;
 }
 
 PyObject* CoordinateSystemPy::displacement(PyObject * args)
 {
-    PyObject *cs;
+    PyObject *cs{};
     if (!PyArg_ParseTuple(args, "O!", &(CoordinateSystemPy::Type), &cs))
-        return 0;
+        return nullptr;
     Placement p = getCoordinateSystemPtr()->displacement(
         *static_cast<CoordinateSystemPy*>(cs)->getCoordinateSystemPtr());
     return new PlacementPy(new Placement(p));
@@ -82,9 +82,9 @@ PyObject* CoordinateSystemPy::displacement(PyObject * args)
 
 PyObject* CoordinateSystemPy::transformTo(PyObject * args)
 {
-    PyObject *vec;
+    PyObject *vec{};
     if (!PyArg_ParseTuple(args, "O!", &(VectorPy::Type), &vec))
-        return 0;
+        return nullptr;
     Vector3d v = static_cast<VectorPy*>(vec)->value();
     getCoordinateSystemPtr()->transformTo(v);
     return new VectorPy(new Vector3d(v));
@@ -92,7 +92,7 @@ PyObject* CoordinateSystemPy::transformTo(PyObject * args)
 
 PyObject* CoordinateSystemPy::transform(PyObject * args)
 {
-    PyObject *plm;
+    PyObject *plm{};
     if (PyArg_ParseTuple(args, "O!", &(PlacementPy::Type), &plm)) {
         getCoordinateSystemPtr()->transform(*static_cast<PlacementPy*>(plm)->getPlacementPtr());
         Py_Return;
@@ -105,19 +105,19 @@ PyObject* CoordinateSystemPy::transform(PyObject * args)
     }
 
     PyErr_SetString(PyExc_TypeError, "Rotation or placement expected");
-    return 0;
+    return nullptr;
 }
 
 PyObject* CoordinateSystemPy::setPlacement(PyObject * args)
 {
-    PyObject *plm;
+    PyObject *plm{};
     if (!PyArg_ParseTuple(args, "O!", &(PlacementPy::Type), &plm))
-        return NULL;
+        return nullptr;
     getCoordinateSystemPtr()->setPlacement(*static_cast<PlacementPy*>(plm)->getPlacementPtr());
     Py_Return;
 }
 
-Py::Object CoordinateSystemPy::getAxis(void) const
+Py::Object CoordinateSystemPy::getAxis() const
 {
     const Axis& axis = getCoordinateSystemPtr()->getAxis();
     return Py::asObject(new AxisPy(new Axis(axis)));
@@ -134,9 +134,9 @@ void CoordinateSystemPy::setAxis(Py::Object arg)
     throw Py::TypeError("not an Axis");
 }
 
-Py::Object CoordinateSystemPy::getXDirection(void) const
+Py::Object CoordinateSystemPy::getXDirection() const
 {
-    return Py::Vector(getCoordinateSystemPtr()->getXDirection());
+    return Py::Vector(getCoordinateSystemPtr()->getXDirection()); // NOLINT
 }
 
 void CoordinateSystemPy::setXDirection(Py::Object arg)
@@ -144,9 +144,9 @@ void CoordinateSystemPy::setXDirection(Py::Object arg)
     getCoordinateSystemPtr()->setXDirection(Py::Vector(arg).toVector());
 }
 
-Py::Object CoordinateSystemPy::getYDirection(void) const
+Py::Object CoordinateSystemPy::getYDirection() const
 {
-    return Py::Vector(getCoordinateSystemPtr()->getYDirection());
+    return Py::Vector(getCoordinateSystemPtr()->getYDirection()); // NOLINT
 }
 
 void CoordinateSystemPy::setYDirection(Py::Object arg)
@@ -154,9 +154,9 @@ void CoordinateSystemPy::setYDirection(Py::Object arg)
     getCoordinateSystemPtr()->setYDirection(Py::Vector(arg).toVector());
 }
 
-Py::Object CoordinateSystemPy::getZDirection(void) const
+Py::Object CoordinateSystemPy::getZDirection() const
 {
-    return Py::Vector(getCoordinateSystemPtr()->getZDirection());
+    return Py::Vector(getCoordinateSystemPtr()->getZDirection()); // NOLINT
 }
 
 void CoordinateSystemPy::setZDirection(Py::Object arg)
@@ -164,9 +164,9 @@ void CoordinateSystemPy::setZDirection(Py::Object arg)
     getCoordinateSystemPtr()->setZDirection(Py::Vector(arg).toVector());
 }
 
-Py::Object CoordinateSystemPy::getPosition(void) const
+Py::Object CoordinateSystemPy::getPosition() const
 {
-    return Py::Vector(getCoordinateSystemPtr()->getPosition());
+    return Py::Vector(getCoordinateSystemPtr()->getPosition()); // NOLINT
 }
 
 void CoordinateSystemPy::setPosition(Py::Object arg)
@@ -176,7 +176,7 @@ void CoordinateSystemPy::setPosition(Py::Object arg)
 
 PyObject *CoordinateSystemPy::getCustomAttributes(const char* /*attr*/) const
 {
-    return 0;
+    return nullptr;
 }
 
 int CoordinateSystemPy::setCustomAttributes(const char* /*attr*/, PyObject* /*obj*/)

@@ -35,7 +35,7 @@ using namespace Base;
 
 double Vector2d::GetAngle (const Vector2d &rclVect) const
 {
-  double fDivid, fNum;
+  double fDivid = 0.0, fNum = 0.0;
 
   fDivid = Length() * rclVect.Length();
 
@@ -43,7 +43,7 @@ double Vector2d::GetAngle (const Vector2d &rclVect) const
   {
     fNum = (*this * rclVect) / fDivid;
     if (fNum < -1)
-      return F_PI;
+      return D_PI;
     else
       if (fNum > 1)
         return 0.0;
@@ -106,18 +106,6 @@ bool BoundBox2d::Intersect(const Line2d &rclLine) const
 
 bool BoundBox2d::Intersect(const BoundBox2d &rclBB) const
 {
-//// compare bb2-points to this
-//if (Contains (Vector2d (rclBB.fMinX, rclBB.fMinY))) return true;
-//if (Contains (Vector2d (rclBB.fMaxX, rclBB.fMinY))) return true;
-//if (Contains (Vector2d (rclBB.fMaxX, rclBB.fMaxY))) return true;
-//if (Contains (Vector2d (rclBB.fMinX, rclBB.fMaxY))) return true;
-//
-//// compare this-points to bb2
-//if (rclBB.Contains (Vector2d (fMinX, fMinY))) return true;
-//if (rclBB.Contains (Vector2d (fMaxX, fMinY))) return true;
-//if (rclBB.Contains (Vector2d (fMaxX, fMaxY))) return true;
-//if (rclBB.Contains (Vector2d (fMinX, fMaxY))) return true;
-
   if (MinX       < rclBB.MaxX  &&
       rclBB.MinX < MaxX        &&
       MinY       < rclBB.MaxY  &&
@@ -129,7 +117,7 @@ bool BoundBox2d::Intersect(const BoundBox2d &rclBB) const
 
 bool BoundBox2d::Intersect(const Polygon2d &rclPoly) const
 {
-  unsigned long i;
+  unsigned long i = 0;
   Line2d clLine;
 
   // points contained in boundbox
@@ -145,7 +133,8 @@ bool BoundBox2d::Intersect(const Polygon2d &rclPoly) const
     return true;    /***** RETURN INTERSECTION *********/
 
   // test intersections of bound-lines
-  if (rclPoly.GetCtVectors() < 3) return false;
+  if (rclPoly.GetCtVectors() < 3)
+      return false;
   for (i = 0; i < rclPoly.GetCtVectors(); i++)
   {
     if (i == rclPoly.GetCtVectors() - 1)
@@ -168,7 +157,7 @@ bool BoundBox2d::Intersect(const Polygon2d &rclPoly) const
 /********************************************************/
 /** LINE2D **********************************************/
 
-BoundBox2d Line2d::CalcBoundBox (void) const
+BoundBox2d Line2d::CalcBoundBox () const
 {
   BoundBox2d clBB;
   clBB.MinX = std::min<double> (clV1.x, clV2.x);
@@ -180,17 +169,17 @@ BoundBox2d Line2d::CalcBoundBox (void) const
 
 bool Line2d::Intersect (const Line2d& rclLine, Vector2d &rclV) const
 {
-  double m1, m2, b1, b2;
+  double m1 = 0.0, m2 = 0.0, b1 = 0.0, b2 = 0.0;
 
   // calc coefficients
   if (fabs (clV2.x - clV1.x) > 1e-10)
     m1 = (clV2.y - clV1.y) / (clV2.x - clV1.x);
   else
-    m1 = FLOAT_MAX;
+    m1 = DOUBLE_MAX;
   if (fabs (rclLine.clV2.x - rclLine.clV1.x) > 1e-10)
     m2 = (rclLine.clV2.y - rclLine.clV1.y) / (rclLine.clV2.x - rclLine.clV1.x);
   else
-    m2 = FLOAT_MAX;
+    m2 = DOUBLE_MAX;
   if (m1 == m2)     /****** RETURN ERR (parallel lines) *************/
     return false;
 
@@ -198,13 +187,13 @@ bool Line2d::Intersect (const Line2d& rclLine, Vector2d &rclV) const
   b2 = rclLine.clV1.y - m2 * rclLine.clV1.x;
 
   // calc intersection
-  if (m1 == FLOAT_MAX)
+  if (m1 == DOUBLE_MAX)
   {
     rclV.x = clV1.x;
     rclV.y = m2 * rclV.x + b2;
   }
   else
-  if (m2 == FLOAT_MAX)
+  if (m2 == DOUBLE_MAX)
   {
     rclV.x = rclLine.clV1.x;
     rclV.y = m1 * rclV.x + b1;
@@ -244,7 +233,7 @@ Vector2d Line2d::FromPos (double fDistance) const
 {
   Vector2d clDir(clV2 - clV1);
   clDir.Normalize();
-  return Vector2d(clV1.x + (clDir.x * fDistance), clV1.y + (clDir.y * fDistance));
+  return {clV1.x + (clDir.x * fDistance), clV1.y + (clDir.y * fDistance)};
 }
 
 bool Line2d::IntersectAndContain (const Line2d& rclLine, Vector2d &rclV) const
@@ -258,9 +247,9 @@ bool Line2d::IntersectAndContain (const Line2d& rclLine, Vector2d &rclV) const
 /********************************************************/
 /** POLYGON2d ********************************************/
 
-BoundBox2d Polygon2d::CalcBoundBox (void) const
+BoundBox2d Polygon2d::CalcBoundBox () const
 {
-  unsigned long i;
+  unsigned long i = 0;
   BoundBox2d clBB;
   for (i = 0; i < _aclVct.size(); i++)
   {
@@ -274,8 +263,8 @@ BoundBox2d Polygon2d::CalcBoundBox (void) const
 
 static short _CalcTorsion (double *pfLine, double fX, double fY)
 {
-  int sQuad[2], i; // Changing this from short to int allows the compiler to inline this function
-  double fResX;
+  int sQuad[2], i = 0; // Changing this from short to int allows the compiler to inline this function
+  double fResX = 0.0;
 
   // Classification of both polygon points into quadrants
   for (i = 0; i < 2; i++)
@@ -288,7 +277,8 @@ static short _CalcTorsion (double *pfLine, double fX, double fY)
 
   // Abort at line points within a quadrant
   // Abort at non-intersecting line points
-  if (abs (sQuad[0] - sQuad[1]) <= 1) return 0;
+  if (abs (sQuad[0] - sQuad[1]) <= 1)
+      return 0;
 
   // Both points to the left of ulX
   if (abs (sQuad[0] - sQuad[1]) == 3)
@@ -313,11 +303,12 @@ bool Polygon2d::Contains (const Vector2d &rclV) const
   // whether a point is contained within a polygon.
   // The sum of all turns indicates whether yes or no.
   double pfTmp[4];
-  unsigned long i;
+  unsigned long i = 0;
   short sTorsion = 0;
 
   // Error check
-  if (GetCtVectors() < 3)  return false;
+  if (GetCtVectors() < 3)
+      return false;
 
   // for all polygon lines
   for (i = 0; i < GetCtVectors(); i++)
@@ -360,7 +351,7 @@ void Polygon2d::Intersect (const Polygon2d &rclPolygon, std::list<Polygon2d> &rc
   bool bInner = Contains(rclPolygon[0]);
 
   Polygon2d clResultPolygon;
-  if (bInner == true)  // add first point if inner trim-polygon
+  if (bInner)  // add first point if inner trim-polygon
     clResultPolygon.Add(rclPolygon[0]);
 
   // for each polygon segment
@@ -381,7 +372,7 @@ void Polygon2d::Intersect (const Polygon2d &rclPolygon, std::list<Polygon2d> &rc
       Line2d clToTrimLine(At(i), clTrimPt2);
 
       Vector2d clV;
-      if (clLine.IntersectAndContain(clToTrimLine, clV) == true)
+      if (clLine.IntersectAndContain(clToTrimLine, clV))
       {
         // save line parameter of intersection point
         double fDist = (clV - clPt0).Length();
@@ -391,11 +382,11 @@ void Polygon2d::Intersect (const Polygon2d &rclPolygon, std::list<Polygon2d> &rc
 
     if (afIntersections.size() > 0)  // intersections founded
     {
-      for (std::set<double>::iterator pF = afIntersections.begin(); pF != afIntersections.end(); ++pF)
+      for (double it : afIntersections)
       {
         // intersection point
-        Vector2d clPtIS = clLine.FromPos(*pF);
-        if (bInner == true)
+        Vector2d clPtIS = clLine.FromPos(it);
+        if (bInner)
         {
           clResultPolygon.Add(clPtIS);
           rclResultPolygonList.push_back(clResultPolygon);
@@ -409,12 +400,12 @@ void Polygon2d::Intersect (const Polygon2d &rclPolygon, std::list<Polygon2d> &rc
         }
       }
 
-      if (bInner == true) // add line end point if inside
+      if (bInner) // add line end point if inside
         clResultPolygon.Add(clPt1);
     }
     else
     {  // no intersections, add line (means second point of it) if inside trim-polygon
-      if (bInner == true)
+      if (bInner)
         clResultPolygon.Add(clPt1);
     }
   }

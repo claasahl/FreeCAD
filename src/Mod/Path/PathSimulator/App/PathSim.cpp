@@ -22,16 +22,8 @@
 
 #include "PreCompiled.h"
 
-#ifndef _PreComp_
-# include <boost/regex.hpp>
-#endif
-
-#include <App/Application.h>
-#include <App/Document.h>
-#include <Base/Exception.h>
-#include <Base/Console.h>
-
 #include "PathSim.h"
+
 
 using namespace Base;
 using namespace PathSimulator;
@@ -40,27 +32,21 @@ TYPESYSTEM_SOURCE(PathSimulator::PathSim , Base::BaseClass);
 
 PathSim::PathSim()
 {
-	m_stock = nullptr;
-	m_tool = nullptr;
 }
 
 PathSim::~PathSim()
 {
-	if (m_stock != nullptr)
-	    delete m_stock;
-	if (m_tool != nullptr)
-		delete m_tool;
 }
 
 void PathSim::BeginSimulation(Part::TopoShape * stock, float resolution)
 {
 	Base::BoundBox3d bbox = stock->getBoundBox();
-	m_stock = new cStock(bbox.MinX, bbox.MinY, bbox.MinZ, bbox.LengthX(), bbox.LengthY(), bbox.LengthZ(), resolution);
+	m_stock = std::make_unique<cStock>(bbox.MinX, bbox.MinY, bbox.MinZ, bbox.LengthX(), bbox.LengthY(), bbox.LengthZ(), resolution);
 }
 
 void PathSim::SetToolShape(const TopoDS_Shape& toolShape, float resolution)
 {
-	m_tool = new cSimTool(toolShape, resolution);
+	m_tool = std::make_unique<cSimTool>(toolShape, resolution);
 }
 
 Base::Placement * PathSim::ApplyCommand(Base::Placement * pos, Command * cmd)
@@ -68,7 +54,7 @@ Base::Placement * PathSim::ApplyCommand(Base::Placement * pos, Command * cmd)
 	Point3D fromPos(*pos);
 	Point3D toPos(*pos);
 	toPos.UpdateCmd(*cmd);
-	if (m_tool != NULL)
+	if (m_tool)
 	{
 		if (cmd->Name == "G0" || cmd->Name == "G1")
 		{

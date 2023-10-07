@@ -23,7 +23,7 @@
 
 __title__ = "Mesh import and export for Z88 mesh file format"
 __author__ = "Bernd Hahnebach"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 ## @package importZ88Mesh
 #  \ingroup FEM
@@ -41,12 +41,7 @@ from femmesh import meshtools
 # names are fix given from FreeCAD, these methods are called from FreeCAD
 # they are set in FEM modules Init.py
 
-if open.__module__ == "__builtin__":
-    # because we'll redefine open below (Python2)
-    pyopen = open
-elif open.__module__ == "io":
-    # because we'll redefine open below (Python3)
-    pyopen = open
+pyopen = open
 
 
 def open(
@@ -180,7 +175,7 @@ def read_z88_mesh(
     nodes_count = int(mesh_info[1])
     elements_count = int(mesh_info[2])
     kflag = int(mesh_info[4])
-    # for non rotational elements ist --> kflag = 0 --> cartesian, kflag = 1 polar coordinates
+    # for non rotational elements is --> kflag = 0 --> cartesian, kflag = 1 polar coordinates
     if kflag:
         Console.PrintError(
             "KFLAG = 1, Rotational coordinates not supported at the moment\n"

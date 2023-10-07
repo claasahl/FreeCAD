@@ -62,12 +62,11 @@ PyObject *UnitPy::PyMake(struct _typeobject *, PyObject *, PyObject *)  // Pytho
 // constructor method
 int UnitPy::PyInit(PyObject* args, PyObject* /*kwd*/)
 {
-    PyObject *object;
+    PyObject *object{};
     Unit *self = getUnitPtr();
 
     // get quantity
     if (PyArg_ParseTuple(args,"O!",&(Base::QuantityPy::Type), &object)) {
-        // Note: must be static_cast, not reinterpret_cast
         *self = static_cast<Base::QuantityPy*>(object)->getQuantityPtr()->getUnit();
         return 0;
     }
@@ -75,14 +74,13 @@ int UnitPy::PyInit(PyObject* args, PyObject* /*kwd*/)
 
     // get unit
     if (PyArg_ParseTuple(args,"O!",&(Base::UnitPy::Type), &object)) {
-        // Note: must be static_cast, not reinterpret_cast
         *self = *(static_cast<Base::UnitPy*>(object)->getUnitPtr());
         return 0;
     }
     PyErr_Clear(); // set by PyArg_ParseTuple()
 
     // get string
-    char* string;
+    char* string{};
     if (PyArg_ParseTuple(args,"et", "utf-8", &string)) {
         QString qstr = QString::fromUtf8(string);
         PyMem_Free(string);
@@ -90,8 +88,8 @@ int UnitPy::PyInit(PyObject* args, PyObject* /*kwd*/)
             *self = Quantity::parse(qstr).getUnit();
             return 0;
         }
-        catch (const Base::Exception& e) {
-            PyErr_SetString(PyExc_RuntimeError, e.what());
+        catch (const Base::ParserError& e) {
+            PyErr_SetString(PyExc_ValueError, e.what());
             return -1;
         }
     }
@@ -196,12 +194,12 @@ PyObject* UnitPy::richCompare(PyObject *v, PyObject *w, int op)
             return nullptr;
         }
         else if (op == Py_EQ) {
-            res = (*u1 == *u2) ? Py_True : Py_False;
+            res = (*u1 == *u2) ? Py_True : Py_False; //NOLINT
             Py_INCREF(res);
             return res;
         }
         else {
-            res = (*u1 != *u2) ? Py_True : Py_False;
+            res = (*u1 != *u2) ? Py_True : Py_False; //NOLINT
             Py_INCREF(res);
             return res;
         }
@@ -215,7 +213,7 @@ PyObject* UnitPy::richCompare(PyObject *v, PyObject *w, int op)
 
 Py::String UnitPy::getType() const
 {
-    return Py::String(getUnitPtr()->getTypeString().toUtf8(),"utf-8");
+    return {getUnitPtr()->getTypeString().toUtf8(),"utf-8"};
 }
 
 Py::Tuple UnitPy::getSignature() const

@@ -20,57 +20,50 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
-#ifndef _PreComp_
-# include <Python.h>
-#endif
-
-#include <CXX/Extensions.hxx>
-#include <CXX/Objects.hxx>
 
 #include <Base/Console.h>
 #include <Base/Interpreter.h>
+#include <Base/PyObjectBase.h>
 #include <Gui/Application.h>
-#include <Gui/WorkbenchManager.h>
 #include <Gui/Language/Translator.h>
-#include "Workbench.h"
 #include <Gui/WidgetFactory.h>
-#include "DlgStartPreferencesImp.h"
 
-#include <Mod/Start/App/StartConfiguration.h>
+#include "DlgStartPreferencesImp.h"
+#include "Workbench.h"
 
 
 // use a different name to CreateCommand()
-void CreateStartCommands(void);
+void CreateStartCommands();
 
 void loadStartResource()
 {
     // add resources and reloads the translators
     Q_INIT_RESOURCE(Start);
+    Q_INIT_RESOURCE(Start_translation);
     Gui::Translator::instance()->refresh();
 }
 
-namespace StartGui {
-class Module : public Py::ExtensionModule<Module>
+namespace StartGui
+{
+class Module: public Py::ExtensionModule<Module>
 {
 public:
-    Module() : Py::ExtensionModule<Module>("StartGui")
+    Module()
+        : Py::ExtensionModule<Module>("StartGui")
     {
-        initialize("This module is the StartGui module."); // register with Python
+        initialize("This module is the StartGui module.");  // register with Python
     }
-
-    virtual ~Module() {}
 
 private:
 };
 
 PyObject* initModule()
 {
-    return (new Module)->module().ptr();
+    return Base::Interpreter().addModule(new Module);
 }
 
-} // namespace StartGui
+}  // namespace StartGui
 
 
 /* Python entry */
@@ -78,16 +71,16 @@ PyMOD_INIT_FUNC(StartGui)
 {
     if (!Gui::Application::Instance) {
         PyErr_SetString(PyExc_ImportError, "Cannot load Gui module in console application.");
-        PyMOD_Return(0);
+        PyMOD_Return(nullptr);
     }
 
     // load dependent module
     try {
         Base::Interpreter().runString("import WebGui");
     }
-    catch(const Base::Exception& e) {
+    catch (const Base::Exception& e) {
         PyErr_SetString(PyExc_ImportError, e.what());
-        PyMOD_Return(0);
+        PyMOD_Return(nullptr);
     }
     catch (Py::Exception& e) {
         Py::Object o = Py::type(e);
@@ -106,14 +99,17 @@ PyMOD_INIT_FUNC(StartGui)
     PyObject* mod = StartGui::initModule();
     Base::Console().Log("Loading GUI of Start module... done\n");
 
+    // clang-format off
     // register preferences pages
-    new Gui::PrefPageProducer<StartGui::DlgStartPreferencesImp> ("Start");
+    new Gui::PrefPageProducer<StartGui::DlgStartPreferencesImp> (QT_TRANSLATE_NOOP("QObject", "Start"));
+    new Gui::PrefPageProducer<StartGui::DlgStartPreferencesAdvancedImp> (QT_TRANSLATE_NOOP("QObject", "Start"));
+    // clang-format on
 
     // instantiating the commands
     CreateStartCommands();
     StartGui::Workbench::init();
 
-     // add resources and reloads the translators
+    // add resources and reloads the translators
     loadStartResource();
     PyMOD_Return(mod);
 }

@@ -24,35 +24,26 @@
 
 #ifndef _PreComp_
 #include <QMessageBox>
-# include <Precision.hxx>
 # include <gp_Pln.hxx>
+# include <Precision.hxx>
 #endif
 
-#include <Base/Console.h>
-#include <App/Part.h>
 #include <App/Origin.h>
 #include <App/OriginFeature.h>
-#include <App/DocumentObjectGroup.h>
+#include <App/Part.h>
 #include <Gui/Application.h>
-#include <Gui/Command.h>
 #include <Gui/CommandT.h>
 #include <Gui/MainWindow.h>
 #include <Gui/MDIView.h>
-#include <Gui/ViewProviderPart.h>
-
+#include <Mod/PartDesign/App/Body.h>
+#include <Mod/PartDesign/App/Feature.h>
+#include <Mod/PartDesign/App/FeatureSketchBased.h>
 #include <Mod/Sketcher/App/SketchObject.h>
 
-#include <Mod/PartDesign/App/Feature.h>
-#include <Mod/PartDesign/App/Body.h>
-#include <Mod/PartDesign/App/FeaturePrimitive.h>
-#include <Mod/PartDesign/App/FeatureSketchBased.h>
-#include <Mod/PartDesign/App/FeatureBoolean.h>
-#include <Mod/PartDesign/App/DatumCS.h>
-
-#include "ReferenceSelection.h"
 #include "Utils.h"
-#include "WorkflowManager.h"
 #include "DlgActiveBody.h"
+#include "ReferenceSelection.h"
+#include "WorkflowManager.h"
 
 
 FC_LOG_LEVEL_INIT("PartDesignGui",true,true)
@@ -64,29 +55,46 @@ using namespace Attacher;
 
 namespace PartDesignGui {
 
+// TODO: Refactor DocumentObjectItem::getSubName() that has similar logic
+App::DocumentObject* getParent(App::DocumentObject* obj, std::string& subname)
+{
+    auto inlist = obj->getInList();
+    for (auto it : inlist) {
+        if (it->hasExtension(App::GeoFeatureGroupExtension::getExtensionClassTypeId())) {
+            std::string parent;
+            parent += obj->getNameInDocument();
+            parent += '.';
+            subname = parent + subname;
+            return getParent(it, subname);
+        }
+    }
+
+    return obj;
+}
+
 bool setEdit(App::DocumentObject *obj, PartDesign::Body *body) {
-    if(!obj || !obj->getNameInDocument()) {
+    if (!obj || !obj->getNameInDocument()) {
         FC_ERR("invalid object");
         return false;
     }
-    if(body == 0) {
+    if (!body) {
         body = getBodyFor(obj, false);
-        if(!body) {
+        if (!body) {
             FC_ERR("no body found");
             return false;
         }
     }
     auto *activeView = Gui::Application::Instance->activeView();
-    if(!activeView) return false;
-    App::DocumentObject *parent = 0;
+    if (!activeView)
+        return false;
+    App::DocumentObject *parent = nullptr;
     std::string subname;
-    auto activeBody = activeView->getActiveObject<PartDesign::Body*>(PDBODYKEY,&parent,&subname);
-    if(activeBody != body) {
+    auto activeBody = activeView->getActiveObject<PartDesign::Body*>(PDBODYKEY);
+    if (activeBody != body) {
         parent = obj;
-        subname.clear();
-    }else{
-        subname += obj->getNameInDocument();
-        subname += '.';
+    }
+    else {
+        parent = getParent(obj, subname);
     }
 
     Gui::cmdGuiDocument(parent, std::ostringstream() << "setEdit("
@@ -103,7 +111,7 @@ bool setEdit(App::DocumentObject *obj, PartDesign::Body *body) {
  * \param autoActivate
  * \return Body
  */
-PartDesign::Body *getBody(bool messageIfNot, bool autoActivate, bool assertModern, 
+PartDesign::Body *getBody(bool messageIfNot, bool autoActivate, bool assertModern,
         App::DocumentObject **topParent, std::string *subname)
 {
     PartDesign::Body * activeBody = nullptr;
@@ -117,7 +125,7 @@ PartDesign::Body *getBody(bool messageIfNot, bool autoActivate, bool assertModer
 
             if (!activeBody && singleBodyDocument && autoActivate) {
                 auto bodies = doc->getObjectsOfType(PartDesign::Body::getClassTypeId());
-                App::DocumentObject *body = 0;
+                App::DocumentObject *body = nullptr;
                 if(bodies.size()==1) {
                     body = bodies[0];
                     activeBody = makeBodyActive(body, doc, topParent, subname);
@@ -145,14 +153,14 @@ PartDesign::Body * makeBodyActive(App::DocumentObject *body, App::Document *doc,
                                   App::DocumentObject **topParent,
                                   std::string *subname)
 {
-    App::DocumentObject *parent = 0;
+    App::DocumentObject *parent = nullptr;
     std::string sub;
 
     for(auto &v : body->getParents()) {
         if(v.first->getDocument()!=doc)
             continue;
         if(parent) {
-            body = 0;
+            body = nullptr;
             break;
         }
         parent = v.first;
@@ -161,7 +169,8 @@ PartDesign::Body * makeBodyActive(App::DocumentObject *body, App::Document *doc,
 
     if(body) {
         auto _doc = parent?parent->getDocument():body->getDocument();
-        _FCMD_DOC_CMD(Gui, _doc, "ActiveView.setActiveObject('" << PDBODYKEY
+        Gui::cmdGuiDocument(_doc, std::stringstream()
+                      << "ActiveView.setActiveObject('" << PDBODYKEY
                       << "'," << Gui::Command::getObjectCmd(parent?parent:body)
                       << ",'" << sub << "')");
         return Gui::Application::Instance->activeView()->
@@ -171,7 +180,7 @@ PartDesign::Body * makeBodyActive(App::DocumentObject *body, App::Document *doc,
     return dynamic_cast<PartDesign::Body*>(body);
 }
 
-void needActiveBodyError(void)
+void needActiveBodyError()
 {
     QMessageBox::warning( Gui::getMainWindow(),
         QObject::tr("Active Body Required"),
@@ -222,7 +231,7 @@ App::Part* getActivePart() {
     if ( activeView ) {
         return activeView->getActiveObject<App::Part*> (PARTKEY);
     } else {
-        return 0;
+        return nullptr;
     }
 }
 
@@ -270,7 +279,7 @@ void fixSketchSupport (Sketcher::SketchObject* sketch)
         return; // Sketch is on a face of a solid, do nothing
 
     const App::Document* doc = sketch->getDocument();
-    PartDesign::Body *body = getBodyFor(sketch, /*messageIfNot*/ 0);
+    PartDesign::Body *body = getBodyFor(sketch, /*messageIfNot*/ false);
     if (!body) {
         throw Base::RuntimeError ("Couldn't find body for the sketch");
     }
@@ -288,7 +297,7 @@ void fixSketchSupport (Sketcher::SketchObject* sketch)
     bool reverseSketch = (sketchVector.x + sketchVector.y + sketchVector.z) < 0.0 ;
     if (reverseSketch) sketchVector *= -1.0;
 
-    App::Plane *plane =0;
+    App::Plane *plane =nullptr;
 
     if (sketchVector == Base::Vector3d(0,0,1))
         plane = origin->getXY ();
@@ -435,7 +444,7 @@ void relinkToBody (PartDesign::Feature *feature) {
                     }
                 }
 
-                if ( !valueStr.empty () ) {
+                if ( !valueStr.empty () && prop->hasName()) {
                     FCMD_OBJ_CMD(obj,prop->getName() << '=' << valueStr);
                 }
             }
@@ -445,6 +454,9 @@ void relinkToBody (PartDesign::Feature *feature) {
 
 bool isFeatureMovable(App::DocumentObject* const feat)
 {
+    if (!feat)
+        return false;
+
     if (feat->getTypeId().isDerivedFrom(PartDesign::Feature::getClassTypeId())) {
         auto prim = static_cast<PartDesign::Feature*>(feat);
         App::DocumentObject* bf = prim->BaseFeature.getValue();
@@ -460,7 +472,9 @@ bool isFeatureMovable(App::DocumentObject* const feat)
             return false;
 
         if (auto prop = static_cast<App::PropertyLinkList*>(prim->getPropertyByName("Sections"))) {
-            if (std::any_of(prop->getValues().begin(), prop->getValues().end(), [](App::DocumentObject* obj){return !isFeatureMovable(obj); }))
+            if (std::any_of(prop->getValues().begin(), prop->getValues().end(), [](App::DocumentObject* obj){
+                return !isFeatureMovable(obj);
+            }))
                 return false;
         }
 

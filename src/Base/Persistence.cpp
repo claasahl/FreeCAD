@@ -22,15 +22,22 @@
 
 
 #include "PreCompiled.h"
-#include "Writer.h"
-#include "Reader.h"
-#include "PyObjectBase.h"
 
 #ifndef _PreComp_
+#include <cassert>
 #endif
+
+#include "Exception.h"
+#include "Reader.h"
+#include "Writer.h"
 
 /// Here the FreeCAD includes sorted by Base,App,Gui......
 #include "Persistence.h"
+
+#ifndef _PreComp_
+# include <xercesc/dom/DOM.hpp>
+#endif
+
 
 using namespace Base;
 
@@ -45,7 +52,7 @@ TYPESYSTEM_SOURCE_ABSTRACT(Base::Persistence,Base::BaseClass)
 //**************************************************************************
 // separator for other implementation aspects
 
-unsigned int Persistence::getMemSize (void) const
+unsigned int Persistence::getMemSize () const
 {
     // you have to implement this method in all descending classes!
     assert(0);
@@ -55,6 +62,20 @@ unsigned int Persistence::getMemSize (void) const
 void Persistence::Save (Writer &/*writer*/) const
 {
     // you have to implement this method in all descending classes!
+    assert(0);
+}
+
+
+void Persistence::Restore(DocumentReader &/*reader*/)
+{
+	// you have to implement this method in all descending classes!
+    assert(0);
+}
+
+
+void Persistence::Restore(DocumentReader &/*reader*/,XERCES_CPP_NAMESPACE_QUALIFIER DOMElement */*containerEl*/)
+{
+	// you have to implement this method in all descending classes!
     assert(0);
 }
 
@@ -75,25 +96,25 @@ void Persistence::RestoreDocFile(Reader &/*reader*/)
 std::string Persistence::encodeAttribute(const std::string& str)
 {
     std::string tmp;
-    for (std::string::const_iterator it = str.begin(); it != str.end(); ++it) {
-        if (*it == '<')
+    for (char it : str) {
+        if (it == '<')
             tmp += "&lt;";
-        else if (*it == '\"')
+        else if (it == '\"')
             tmp += "&quot;";
-        else if (*it == '\'')
+        else if (it == '\'')
             tmp += "&apos;";
-        else if (*it == '&')
+        else if (it == '&')
             tmp += "&amp;";
-        else if (*it == '>')
+        else if (it == '>')
             tmp += "&gt;";
-        else if (*it == '\r')
+        else if (it == '\r')
             tmp += "&#13;";
-        else if (*it == '\n')
+        else if (it == '\n')
             tmp += "&#10;";
-        else if (*it == '\t')
+        else if (it == '\t')
             tmp += "&#9;";
         else
-            tmp += *it;
+            tmp += it;
     }
 
     return tmp;
@@ -110,7 +131,7 @@ void Persistence::dumpToStream(std::ostream& stream, int compression)
         writer.putNextEntry("Persistence.xml");
         writer.setMode("BinaryBrep");
 
-        //save the content (we need to encapsulte it with xml tags to be able to read single element xmls like happen for properties)
+        //save the content (we need to encapsulate it with xml tags to be able to read single element xmls like happen for properties)
         writer.Stream() << "<Content>" << std::endl;
         Save(writer);
         writer.Stream() << "</Content>";

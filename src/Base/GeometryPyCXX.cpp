@@ -27,7 +27,7 @@
 #endif
 
 #include "GeometryPyCXX.h"
-#include <Base/VectorPy.h>
+#include "VectorPy.h"
 
 
 int Py::Vector::Vector_TypeCheck(PyObject * obj)
@@ -61,7 +61,8 @@ Py::Vector::Vector (const Base::Vector3f& v)
 
 Py::Vector& Py::Vector::operator= (PyObject* rhsp)
 {
-    if(ptr() == rhsp) return *this;
+    if(ptr() == rhsp)
+        return *this;
     set (rhsp, false);
     return *this;
 }
@@ -90,6 +91,21 @@ Base::Vector3d Py::Vector::toVector() const
 
 namespace Base {
 
+Py::PythonType& Vector2dPy::behaviors()
+{
+    return Py::PythonClass<Vector2dPy>::behaviors();
+}
+
+PyTypeObject* Vector2dPy::type_object()
+{
+    return Py::PythonClass<Vector2dPy>::type_object();
+}
+
+bool Vector2dPy::check( PyObject *p )
+{
+    return Py::PythonClass<Vector2dPy>::check(p);
+}
+
 Py::PythonClassObject<Vector2dPy> Vector2dPy::create(const Vector2d& v)
 {
     return create(v.x, v.y);
@@ -117,9 +133,7 @@ Vector2dPy::Vector2dPy(Py::PythonClassInstance *self, Py::Tuple &args, Py::Dict 
     v.y = y;
 }
 
-Vector2dPy::~Vector2dPy()
-{
-}
+Vector2dPy::~Vector2dPy() = default;
 
 Py::Object Vector2dPy::repr()
 {
@@ -127,7 +141,8 @@ Py::Object Vector2dPy::repr()
     Py::Float y(v.y);
     std::stringstream str;
     str << "Vector2 (";
-    str << (std::string)x.repr() << ", "<< (std::string)y.repr();
+    str << static_cast<std::string>(x.repr()) << ", "
+        << static_cast<std::string>(y.repr());
     str << ")";
 
     return Py::String(str.str());
@@ -140,13 +155,7 @@ Py::Object Vector2dPy::getattro(const Py::String &name_)
     //
     std::string name( name_.as_std_string( "utf-8" ) );
 
-    if (name == "__members__") { // Py2
-        Py::List attr;
-        attr.append(Py::String("x"));
-        attr.append(Py::String("y"));
-        return attr;
-    }
-    else if (name == "__dict__") { // Py3
+    if (name == "__dict__") {
         Py::Dict attr;
         attr.setItem(Py::String("x"), Py::Float(v.x));
         attr.setItem(Py::String("y"), Py::Float(v.y));
@@ -206,11 +215,6 @@ Py::Object Vector2dPy::number_int()
 }
 
 Py::Object Vector2dPy::number_float()
-{
-    throw Py::TypeError("Not defined");
-}
-
-Py::Object Vector2dPy::number_long()
 {
     throw Py::TypeError("Not defined");
 }
@@ -375,7 +379,7 @@ Py::Object Vector2dPy::projectToLine(const Py::Tuple& args)
 }
 PYCXX_VARARGS_METHOD_DECL(Vector2dPy, projectToLine)
 
-void Vector2dPy::init_type(void)
+void Vector2dPy::init_type()
 {
     behaviors().name( "Vector2d" );
     behaviors().doc( "Vector2d class" );

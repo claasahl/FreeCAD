@@ -24,13 +24,12 @@ import FreeCAD
 import Draft
 import ArchCommands
 import DraftVecUtils
-import sys
 import ArchIFC
 import tempfile
 import os
 if FreeCAD.GuiUp:
     import FreeCADGui
-    from DraftTools import translate
+    from draftutils.translate import translate
     from PySide.QtCore import QT_TRANSLATE_NOOP
     import draftutils.units as units
 else:
@@ -40,8 +39,7 @@ else:
     def QT_TRANSLATE_NOOP(ctxt,txt):
         return txt
     # \endcond
-if sys.version_info.major >= 3:
-    unicode = str
+unicode = str
 
 ## @package ArchBuildingPart
 #  \ingroup ARCH
@@ -52,7 +50,7 @@ if sys.version_info.major >= 3:
 
 __title__  = "FreeCAD Arch BuildingPart"
 __author__ = "Yorik van Havre"
-__url__    = "https://www.freecadweb.org"
+__url__    = "https://www.freecad.org"
 
 
 BuildingTypes = ['Undefined',
@@ -197,19 +195,16 @@ BuildingTypes = ['Undefined',
 ]
 
 
-def makeBuildingPart(objectslist=None,baseobj=None,name="BuildingPart"):
+def makeBuildingPart(objectslist=None,baseobj=None,name=None):
 
-    '''makeBuildingPart(objectslist): creates a buildingPart including the
+    '''makeBuildingPart([objectslist],[name]): creates a buildingPart including the
     objects from the given list.'''
 
     obj = FreeCAD.ActiveDocument.addObject("App::GeometryPython","BuildingPart")
     #obj = FreeCAD.ActiveDocument.addObject("App::FeaturePython","BuildingPart")
-    obj.Label = translate("Arch","BuildingPart")
+    obj.Label = name if name else translate("Arch","BuildingPart")
     BuildingPart(obj)
-    # if no IfcType is set it will be the first in the available
-    # Annotation in IFC2x3 and Actuator in IFC4, both is certainly wrong
-    # use Undefined ATM
-    obj.IfcType = "Undefined"
+    obj.IfcType = "Building Element Part"
     if FreeCAD.GuiUp:
         ViewProviderBuildingPart(obj.ViewObject)
     if objectslist:
@@ -217,22 +212,22 @@ def makeBuildingPart(objectslist=None,baseobj=None,name="BuildingPart"):
     return obj
 
 
-def makeFloor(objectslist=None,baseobj=None,name="Floor"):
+def makeFloor(objectslist=None,baseobj=None,name=None):
 
     """overwrites ArchFloor.makeFloor"""
 
     obj = makeBuildingPart(objectslist)
-    obj.Label = name
+    obj.Label = name if name else translate("Arch","Floor")
     obj.IfcType = "Building Storey"
     return obj
 
 
-def makeBuilding(objectslist=None,baseobj=None,name="Building"):
+def makeBuilding(objectslist=None,baseobj=None,name=None):
 
     """overwrites ArchBuilding.makeBuilding"""
 
     obj = makeBuildingPart(objectslist)
-    obj.Label = name
+    obj.Label = name if name else translate("Arch","Building")
     obj.IfcType = "Building"
     obj.addProperty("App::PropertyEnumeration","BuildingType","Building",QT_TRANSLATE_NOOP("App::Property","The type of this building"))
     obj.BuildingType = BuildingTypes
@@ -291,7 +286,7 @@ class CommandBuildingPart:
         return {'Pixmap'  : 'Arch_BuildingPart',
                 'MenuText': QT_TRANSLATE_NOOP("Arch_BuildingPart","BuildingPart"),
                 'Accel': "B, P",
-                'ToolTip': QT_TRANSLATE_NOOP("Arch_BuildingPart","Creates a BuildingPart object including selected objects")}
+                'ToolTip': QT_TRANSLATE_NOOP("Arch_BuildingPart","Creates a BuildingPart including selected objects")}
 
     def IsActive(self):
 
@@ -361,11 +356,11 @@ class BuildingPart(ArchIFC.IfcProduct):
 
         self.setProperties(obj)
 
-    def __getstate__(self):
+    def dumps(self):
 
         return None
 
-    def __setstate__(self,state):
+    def loads(self,state):
 
         return None
 
@@ -403,7 +398,8 @@ class BuildingPart(ArchIFC.IfcProduct):
                             if deltar:
                                 #child.Placement.Rotation = child.Placement.Rotation.multiply(deltar) - not enough, child must also move
                                 # use shape methods to obtain a correct placement
-                                import Part,math
+                                import Part
+                                import math
                                 shape = Part.Shape()
                                 shape.Placement = child.Placement
                                 #print("angle before rotation:",shape.Placement.Rotation.Angle)
@@ -457,7 +453,7 @@ class BuildingPart(ArchIFC.IfcProduct):
         shapes = []
         solidindex = 0
         materialstable = {}
-        for child in Draft.get_group_contents(obj):
+        for child in Draft.get_group_contents(obj, walls=True):
             if not Draft.get_type(child) in ["Space"]:
                 if hasattr(child,'Shape') and child.Shape:
                     shapes.append(child.Shape)
@@ -487,13 +483,20 @@ class BuildingPart(ArchIFC.IfcProduct):
 
         "Touches all descendents where applicable"
 
-        for child in obj.Group:
+        g = []
+        if hasattr(obj,"Group"):
+            g = obj.Group
+        elif (Draft.getType(obj) in ["Wall","Structure"]):
+            g = obj.Additions
+        for child in g:
             if Draft.getType(child) in ["Wall","Structure"]:
                 if not child.Height.Value:
-                    print("Executing ",child.Label)
+                    FreeCAD.Console.PrintLog("Auto-updating Height of "+child.Name+"\n")
+                    self.touchChildren(child)
                     child.Proxy.execute(child)
             elif Draft.getType(child) in ["Group","BuildingPart"]:
                 self.touchChildren(child)
+
 
     def addObject(self,obj,child):
 
@@ -653,8 +656,10 @@ class ViewProviderBuildingPart:
         self.sep.addChild(self.dst)
         self.lco = coin.SoCoordinate3()
         self.sep.addChild(self.lco)
+        import PartGui # Required for "SoBrepEdgeSet" (because a BuildingPart is not a Part::FeaturePython object).
         lin = coin.SoType.fromName("SoBrepEdgeSet").createInstance()
-        lin.coordIndex.setValues([0,1,-1,2,3,-1,4,5,-1])
+        if lin:
+            lin.coordIndex.setValues([0,1,-1,2,3,-1,4,5,-1])
         self.sep.addChild(lin)
         self.bbox = coin.SoSwitch()
         self.bbox.whichChild = -1
@@ -725,7 +730,7 @@ class ViewProviderBuildingPart:
         "recursively get the colors of objects inside this BuildingPart"
 
         colors = []
-        for child in Draft.get_group_contents(obj):
+        for child in Draft.get_group_contents(obj, walls=True):
             if not Draft.get_type(child) in ["Space"]:
                 if hasattr(child,'Shape') and (hasattr(child.ViewObject,"DiffuseColor") or hasattr(child.ViewObject,"ShapeColor")):
                     if hasattr(child.ViewObject,"DiffuseColor") and len(child.ViewObject.DiffuseColor) == len(child.Shape.Faces):
@@ -748,14 +753,11 @@ class ViewProviderBuildingPart:
             if hasattr(vobj,"LineWidth"):
                 self.dst.lineWidth = vobj.LineWidth
         elif prop == "FontName":
-            if hasattr(vobj,"FontName"):
+            if hasattr(vobj,"FontName") and hasattr(self,"fon"):
                 if vobj.FontName:
-                    if sys.version_info.major < 3:
-                        self.fon.name = vobj.FontName.encode("utf8")
-                    else:
-                        self.fon.name = vobj.FontName
+                    self.fon.name = vobj.FontName
         elif prop in ["FontSize","DisplayOffset","OriginOffset"]:
-            if hasattr(vobj,"FontSize") and hasattr(vobj,"DisplayOffset") and hasattr(vobj,"OriginOffset"):
+            if hasattr(vobj,"FontSize") and hasattr(vobj,"DisplayOffset") and hasattr(vobj,"OriginOffset") and hasattr(self,"fon"):
                 fs = vobj.FontSize.Value
                 if fs:
                     self.fon.size = fs
@@ -768,7 +770,7 @@ class ViewProviderBuildingPart:
                     else:
                         self.lco.point.setValues([[-fs,0,0],[fs,0,0],[0,-fs,0],[0,fs,0],[0,0,-fs],[0,0,fs]])
         elif prop in ["OverrideUnit","ShowUnit","ShowLevel","ShowLabel"]:
-            if hasattr(vobj,"OverrideUnit") and hasattr(vobj,"ShowUnit") and hasattr(vobj,"ShowLevel") and hasattr(vobj,"ShowLabel"):
+            if hasattr(vobj,"OverrideUnit") and hasattr(vobj,"ShowUnit") and hasattr(vobj,"ShowLevel") and hasattr(vobj,"ShowLabel") and hasattr(self,"txt"):
                 z = vobj.Object.Placement.Base.z + vobj.Object.LevelOffset.Value
                 q = FreeCAD.Units.Quantity(z,FreeCAD.Units.Length)
                 txt = ""
@@ -876,44 +878,89 @@ class ViewProviderBuildingPart:
                 o.ViewObject.Lighting = "Two side"
         return True
 
-    def doubleClicked(self,vobj):
+    def setEdit(self, vobj, mode):
+        # For some reason mode is always 0.
+        # Using FreeCADGui.getUserEditMode() as a workaround.
+        if FreeCADGui.getUserEditMode() in ("Transform", "Cutting"):
+            return None
 
-        self.activate(vobj)
-        if (not hasattr(vobj,"DoubleClickActivates")) or vobj.DoubleClickActivates:
-            FreeCADGui.Selection.clearSelection()
+        self.activate()
+        return False # Return `False` as we don't want to enter edit mode.
+
+    def unsetEdit(self, vobj, mode):
+        # For some reason mode is always 0.
+        # Using FreeCADGui.getUserEditMode() as a workaround.
+        if FreeCADGui.getUserEditMode() in ("Transform", "Cutting"):
+            return None
+
         return True
 
-    def activate(self,vobj):
+    def setupContextMenu(self, vobj, menu):
+        from PySide import QtCore, QtGui
+        import Draft_rc
 
-        if FreeCADGui.ActiveDocument.ActiveView.getActiveObject("Arch") == vobj.Object:
-            FreeCADGui.ActiveDocument.ActiveView.setActiveObject("Arch",None)
+        if (not hasattr(vobj,"DoubleClickActivates")) or vobj.DoubleClickActivates:
+            if FreeCADGui.ActiveDocument.ActiveView.getActiveObject("Arch") == self.Object:
+                menuTxt = translate("Arch", "Deactivate")
+            else:
+                menuTxt = translate("Arch", "Activate")
+            actionActivate = QtGui.QAction(menuTxt,
+                                           menu)
+            QtCore.QObject.connect(actionActivate,
+                                   QtCore.SIGNAL("triggered()"),
+                                   self.activate)
+            menu.addAction(actionActivate)
+
+        actionSetWorkingPlane = QtGui.QAction(QtGui.QIcon(":/icons/Draft_SelectPlane.svg"),
+                                              translate("Arch", "Set working plane"),
+                                              menu)
+        QtCore.QObject.connect(actionSetWorkingPlane,
+                               QtCore.SIGNAL("triggered()"),
+                               self.setWorkingPlane)
+        menu.addAction(actionSetWorkingPlane)
+
+        actionWriteCamera = QtGui.QAction(QtGui.QIcon(":/icons/Draft_SelectPlane.svg"),
+                                          translate("Arch", "Write camera position"),
+                                          menu)
+        QtCore.QObject.connect(actionWriteCamera,
+                               QtCore.SIGNAL("triggered()"),
+                               self.writeCamera)
+        menu.addAction(actionWriteCamera)
+
+        actionCreateGroup = QtGui.QAction(translate("Arch", "Create group..."),
+                                          menu)
+        QtCore.QObject.connect(actionCreateGroup,
+                               QtCore.SIGNAL("triggered()"),
+                               self.createGroup)
+        menu.addAction(actionCreateGroup)
+
+        actionReorder = QtGui.QAction(translate("Arch", "Reorder children alphabetically"),
+                                      menu)
+        QtCore.QObject.connect(actionReorder,
+                               QtCore.SIGNAL("triggered()"),
+                               self.reorder)
+        menu.addAction(actionReorder)
+
+        actionCloneUp = QtGui.QAction(translate("Arch", "Clone level up"),
+                                      menu)
+        QtCore.QObject.connect(actionCloneUp,
+                               QtCore.SIGNAL("triggered()"),
+                               self.cloneUp)
+        menu.addAction(actionCloneUp)
+
+    def activate(self):
+        vobj = self.Object.ViewObject
+
+        if FreeCADGui.ActiveDocument.ActiveView.getActiveObject("Arch") == self.Object:
+            FreeCADGui.ActiveDocument.ActiveView.setActiveObject("Arch", None)
             if vobj.SetWorkingPlane:
                 self.setWorkingPlane(restore=True)
-        else:
-            if (not hasattr(vobj,"DoubleClickActivates")) or vobj.DoubleClickActivates:
-                FreeCADGui.ActiveDocument.ActiveView.setActiveObject("Arch",vobj.Object)
+        elif (not hasattr(vobj,"DoubleClickActivates")) or vobj.DoubleClickActivates:
+            FreeCADGui.ActiveDocument.ActiveView.setActiveObject("Arch", self.Object)
             if vobj.SetWorkingPlane:
                 self.setWorkingPlane()
 
-    def setupContextMenu(self,vobj,menu):
-
-        from PySide import QtCore,QtGui
-        import Draft_rc
-        action1 = QtGui.QAction(QtGui.QIcon(":/icons/Draft_SelectPlane.svg"),"Set working plane",menu)
-        QtCore.QObject.connect(action1,QtCore.SIGNAL("triggered()"),self.setWorkingPlane)
-        menu.addAction(action1)
-        action2 = QtGui.QAction(QtGui.QIcon(":/icons/Draft_SelectPlane.svg"),"Write camera position",menu)
-        QtCore.QObject.connect(action2,QtCore.SIGNAL("triggered()"),self.writeCamera)
-        menu.addAction(action2)
-        action3 = QtGui.QAction(QtGui.QIcon(),"Create group...",menu)
-        QtCore.QObject.connect(action3,QtCore.SIGNAL("triggered()"),self.createGroup)
-        menu.addAction(action3)
-        action4 = QtGui.QAction(QtGui.QIcon(),"Reorder children alphabetically",menu)
-        QtCore.QObject.connect(action4,QtCore.SIGNAL("triggered()"),self.reorder)
-        menu.addAction(action4)
-        action5 = QtGui.QAction(QtGui.QIcon(),"Clone level up",menu)
-        QtCore.QObject.connect(action5,QtCore.SIGNAL("triggered()"),self.cloneUp)
-        menu.addAction(action5)
+        FreeCADGui.Selection.clearSelection()
 
     def setWorkingPlane(self,restore=False):
 
@@ -1007,10 +1054,10 @@ class ViewProviderBuildingPart:
                     no.LongName = no.CloneOf.LongName
             FreeCAD.ActiveDocument.recompute()
 
-    def __getstate__(self):
+    def dumps(self):
         return None
 
-    def __setstate__(self,state):
+    def loads(self,state):
         return None
 
     def writeInventor(self,obj):

@@ -24,12 +24,11 @@
 #ifndef BASE_FILETEMPLATE_H
 #define BASE_FILETEMPLATE_H
 
-// Std. configurations
-
 #include <string>
 #ifndef FC_GLOBAL_H
 #include <FCGlobal.h>
 #endif
+
 
 namespace Base
 {
@@ -68,7 +67,7 @@ namespace Base
  *  <li> mouse events
  *     <ol>
  *     <li>mouse move event
- *     <li>mouse click event\n
+ *     <li>mouse click event
  *         More info about the click event.
  *     <li>mouse double click event
  *     </ol>
@@ -102,8 +101,8 @@ public:
         TVal2, /**< enum value TVal2. */
         TVal3  /**< enum value TVal3. */
     }
-    *enumPtr, /**< enum pointer. Details. */
-    enumVar;  /**< enum variable. Details. */
+    *enumPtr{nullptr}, /**< enum pointer. Details. */
+    enumVar{TVal1};  /**< enum variable. Details. */
 
     /**
      * A pure virtual member.
@@ -116,11 +115,11 @@ public:
     /** @name a group of methods */
     //@{
     /// I am method one
-    virtual void one(void)=0;
+    virtual void one()=0;
     /// I am method two
-    virtual void two(void)=0;
+    virtual void two()=0;
     /// I am method three
-    virtual void three(void)=0;
+    virtual void three()=0;
     //@}
 
 
@@ -128,13 +127,13 @@ public:
     * a public variable.
     * Details.
     */
-    int publicVar;
+    int publicVar{0};
 
     /**
      * a function variable.
      * Details.
      */
-    int (*handler)(int a,int b);
+    int (*handler)(int a,int b){nullptr};
 
     std::string something;
 };

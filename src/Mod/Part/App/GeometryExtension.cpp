@@ -20,23 +20,20 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
 
-#include <Base/Writer.h>
 #include <Base/Reader.h>
-#include <Base/Tools.h>
+#include <Base/Writer.h>
 
 #include "GeometryExtension.h"
 #include "GeometryExtensionPy.h"
+
 
 using namespace Part;
 
 TYPESYSTEM_SOURCE_ABSTRACT(Part::GeometryExtension,Base::BaseClass)
 
-GeometryExtension::GeometryExtension()
-{
-}
+GeometryExtension::GeometryExtension() = default;
 
 PyObject* GeometryExtension::copyPyObject() const
 {
@@ -63,7 +60,7 @@ void GeometryPersistenceExtension::saveAttributes(Base::Writer &writer) const
 {
     const std::string name = getName();
 
-    if(name.size() > 0)
+    if(!name.empty())
         writer.Stream() << "\" name=\"" << name;
 
 }

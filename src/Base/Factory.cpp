@@ -28,17 +28,17 @@
 #	include <list>
 #endif
 
-
 #include "Factory.h"
 #include "Console.h"
+
 
 using namespace Base;
 
 
 Factory::~Factory ()
 {
-  for (std::map<const std::string, AbstractProducer*>::iterator pI = _mpcProducers.begin(); pI != _mpcProducers.end(); ++pI)
-    delete pI->second;
+  for (auto & it : _mpcProducers)
+    delete it.second;
 }
 
 void* Factory::Produce (const char *sClassName) const
@@ -49,7 +49,7 @@ void* Factory::Produce (const char *sClassName) const
   if (pProd != _mpcProducers.end())
     return pProd->second->Produce();
   else
-    return NULL;
+    return nullptr;
 }
 
 void Factory::AddProducer (const char *sClassName, AbstractProducer *pcProducer)
@@ -66,9 +66,9 @@ std::list<std::string> Factory::CanProduce() const
 {
   std::list<std::string> lObjects;
 
-  for (std::map<const std::string, AbstractProducer*>::const_iterator pI = _mpcProducers.begin(); pI != _mpcProducers.end(); ++pI)
+  for (const auto & it : _mpcProducers)
   {
-    lObjects.push_back(pI->first);
+    lObjects.push_back(it.first);
   }
 
   return lObjects;
@@ -76,22 +76,22 @@ std::list<std::string> Factory::CanProduce() const
 
 // ----------------------------------------------------
 
-ScriptFactorySingleton* ScriptFactorySingleton::_pcSingleton = NULL;
+ScriptFactorySingleton* ScriptFactorySingleton::_pcSingleton = nullptr;
 
 
 
-ScriptFactorySingleton& ScriptFactorySingleton::Instance(void)
+ScriptFactorySingleton& ScriptFactorySingleton::Instance()
 {
-  if (_pcSingleton == NULL)
+  if (!_pcSingleton)
     _pcSingleton = new ScriptFactorySingleton;
   return *_pcSingleton;
 }
 
-void ScriptFactorySingleton::Destruct (void)
+void ScriptFactorySingleton::Destruct ()
 {
-  if (_pcSingleton != 0)
+  if (_pcSingleton)
     delete _pcSingleton;
-  _pcSingleton = 0;
+  _pcSingleton = nullptr;
 }
 
 const char* ScriptFactorySingleton::ProduceScript (const char* sScriptName) const

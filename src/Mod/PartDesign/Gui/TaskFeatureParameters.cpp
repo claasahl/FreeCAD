@@ -83,10 +83,7 @@ TaskDlgFeatureParameters::TaskDlgFeatureParameters(PartDesignGui::ViewProvider *
     assert(vp);
 }
 
-TaskDlgFeatureParameters::~TaskDlgFeatureParameters()
-{
-
-}
+TaskDlgFeatureParameters::~TaskDlgFeatureParameters() = default;
 
 bool TaskDlgFeatureParameters::accept() {
     App::DocumentObject* feature = vp->getObject();
@@ -97,7 +94,7 @@ bool TaskDlgFeatureParameters::accept() {
             TaskFeatureParameters *param = qobject_cast<TaskFeatureParameters *> (wgt);
             if(!param)
                 continue;
-            
+
             param->saveHistory ();
             param->apply ();
         }
@@ -129,11 +126,7 @@ bool TaskDlgFeatureParameters::accept() {
         Gui::Command::commitCommand();
     } catch (const Base::Exception& e) {
         // Generally the only thing that should fail is feature->isValid() others should be fine
-#if (QT_VERSION >= 0x050000)
         QString errorText = QApplication::translate(feature->getTypeId().getName(), e.what());
-#else
-        QString errorText = QApplication::translate(feature->getTypeId().getName(), e.what(), 0, QApplication::UnicodeUTF8);
-#endif
         QMessageBox::warning(Gui::getMainWindow(), tr("Input error"), errorText);
         return false;
     }

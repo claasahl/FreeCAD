@@ -22,26 +22,25 @@
 
 
 #include "PreCompiled.h"
-#include <Mod/PartDesign/App/Body.h>
-#include <Mod/PartDesign/App/FeaturePrimitive.h>
+
 #ifndef _PreComp_
-# include <Inventor/nodes/SoPickStyle.h>
 # include <QApplication>
 # include <QMessageBox>
 #endif
 
 #include <App/Document.h>
-#include <Gui/Command.h>
 #include <Gui/Action.h>
+#include <Gui/Application.h>
+#include <Gui/BitmapFactory.h>
+#include <Gui/Command.h>
 #include <Gui/Control.h>
 #include <Gui/MainWindow.h>
-#include <Gui/BitmapFactory.h>
-#include <Gui/Application.h>
-#include <Base/Console.h>
+#include <Mod/PartDesign/App/Body.h>
+#include <Mod/PartDesign/App/FeaturePrimitive.h>
 
+#include "DlgActiveBody.h"
 #include "Utils.h"
 #include "WorkflowManager.h"
-#include "DlgActiveBody.h"
 
 using namespace std;
 
@@ -119,7 +118,8 @@ void CmdPrimtiveCompAdditive::activated(int iMsg)
     auto* prm = static_cast<PartDesign::FeaturePrimitive*>(
             pcActiveBody->getDocument()->getObject(FeatName.c_str()));
 
-    if(!prm) return;
+    if(!prm)
+        return;
     FCMD_OBJ_CMD(pcActiveBody,"addObject("<<getObjectCmd(prm)<<")");
     Gui::Command::updateActive();
 
@@ -133,11 +133,11 @@ void CmdPrimtiveCompAdditive::activated(int iMsg)
     copyVisual(prm, "PointColor", base);
     copyVisual(prm, "Transparency", base);
     copyVisual(prm, "DisplayMode", base);
-    
+
     PartDesignGui::setEdit(prm,pcActiveBody);
 }
 
-Gui::Action * CmdPrimtiveCompAdditive::createAction(void)
+Gui::Action * CmdPrimtiveCompAdditive::createAction()
 {
     Gui::ActionGroup* pcAction = new Gui::ActionGroup(this, Gui::getMainWindow());
     pcAction->setDropDownMenu(true);
@@ -229,7 +229,7 @@ void CmdPrimtiveCompAdditive::languageChange()
     arc8->setStatusTip(arc8->toolTip());
 }
 
-bool CmdPrimtiveCompAdditive::isActive(void)
+bool CmdPrimtiveCompAdditive::isActive()
 {
     return (hasActiveDocument() && !Gui::Control().activeDialog());
 }
@@ -293,7 +293,7 @@ void CmdPrimtiveCompSubtractive::activated(int iMsg)
     PartDesignGui::setEdit(Feat,pcActiveBody);
 }
 
-Gui::Action * CmdPrimtiveCompSubtractive::createAction(void)
+Gui::Action * CmdPrimtiveCompSubtractive::createAction()
 {
     Gui::ActionGroup* pcAction = new Gui::ActionGroup(this, Gui::getMainWindow());
     pcAction->setDropDownMenu(true);
@@ -385,7 +385,7 @@ void CmdPrimtiveCompSubtractive::languageChange()
     arc8->setStatusTip(arc8->toolTip());
 }
 
-bool CmdPrimtiveCompSubtractive::isActive(void)
+bool CmdPrimtiveCompSubtractive::isActive()
 {
     return (hasActiveDocument() && !Gui::Control().activeDialog());
 }
@@ -394,7 +394,7 @@ bool CmdPrimtiveCompSubtractive::isActive(void)
 // Initialization
 //===========================================================================
 
-void CreatePartDesignPrimitiveCommands(void)
+void CreatePartDesignPrimitiveCommands()
 {
     Gui::CommandManager &rcCmdMgr = Gui::Application::Instance->commandManager();
 

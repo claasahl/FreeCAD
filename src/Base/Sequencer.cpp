@@ -24,15 +24,12 @@
 #include "PreCompiled.h"
 
 #ifndef _PreComp_
-# include <cstdio>
-# include <algorithm>
-# include <QMutex>
 # include <QMutexLocker>
 #endif
 
 #include "Sequencer.h"
-#include "Console.h"
-#include <CXX/Objects.hxx>
+#include "Mutex.h"
+
 
 using namespace Base;
 
@@ -41,11 +38,7 @@ namespace Base {
         // members
         static std::vector<SequencerBase*> _instances; /**< A vector of all created instances */
         static SequencerLauncher* _topLauncher; /**< The outermost launcher */
-#if QT_VERSION >= QT_VERSION_CHECK(5,14,0)
         static QRecursiveMutex mutex; /**< A mutex-locker for the launcher */
-#else
-        static QMutex mutex; /**< A mutex-locker for the launcher */
-#endif
         /** Sets a global sequencer object.
          * Access to the last registered object is performed by @see Sequencer().
          */
@@ -70,12 +63,8 @@ namespace Base {
      * all instantiated SequencerBase objects.
      */
     std::vector<SequencerBase*> SequencerP::_instances;
-    SequencerLauncher* SequencerP::_topLauncher = 0;
-#if QT_VERSION >= QT_VERSION_CHECK(5,14,0)
+    SequencerLauncher* SequencerP::_topLauncher = nullptr;
     QRecursiveMutex SequencerP::mutex;
-#else
-    QMutex SequencerP::mutex(QMutex::Recursive);
-#endif
 }
 
 SequencerBase& SequencerBase::Instance ()
@@ -89,7 +78,6 @@ SequencerBase& SequencerBase::Instance ()
 }
 
 SequencerBase::SequencerBase()
-  : nProgress(0), nTotalSteps(0), _bLocked(false), _bCanceled(false), _nLastPercentage(-1)
 {
     SequencerP::appendInstance(this);
 }
@@ -129,8 +117,8 @@ void SequencerBase::startStep()
 bool SequencerBase::next(bool canAbort)
 {
     this->nProgress++;
-    float fDiv = this->nTotalSteps > 0 ? (float)this->nTotalSteps : 1000.0f;
-    int perc = (int)((float)this->nProgress * (100.0f / fDiv));
+    float fDiv = this->nTotalSteps > 0 ? static_cast<float>(this->nTotalSteps) : 1000.0f;
+    int perc = int((float(this->nProgress) * (100.0f / fDiv)));
 
     // do only an update if we have increased by one percent
     if (perc > this->_nLastPercentage) {
@@ -188,7 +176,7 @@ bool SequencerBase::isLocked() const
 bool SequencerBase::isRunning() const
 {
     QMutexLocker locker(&SequencerP::mutex);
-    return (SequencerP::_topLauncher != 0);
+    return (SequencerP::_topLauncher != nullptr);
 }
 
 bool SequencerBase::wasCanceled() const
@@ -223,25 +211,7 @@ void SequencerBase::setText(const char*)
 
 // ---------------------------------------------------------
 
-EmptySequencer::EmptySequencer()
-{
-}
-
-EmptySequencer::~EmptySequencer()
-{
-}
-
-// ---------------------------------------------------------
-
 using Base::ConsoleSequencer;
-
-ConsoleSequencer::ConsoleSequencer ()
-{
-}
-
-ConsoleSequencer::~ConsoleSequencer ()
-{
-}
 
 void ConsoleSequencer::setText (const char* pszTxt)
 {
@@ -255,7 +225,7 @@ void ConsoleSequencer::startStep()
 void ConsoleSequencer::nextStep( bool )
 {
     if (this->nTotalSteps != 0)
-        printf("\t\t\t\t\t\t(%2.1f %%)\t\r", (float)progressInPercent());
+        printf("\t\t\t\t\t\t(%d %%)\t\r", progressInPercent());
 }
 
 void ConsoleSequencer::resetData()
@@ -282,7 +252,7 @@ SequencerLauncher::~SequencerLauncher()
     if (SequencerP::_topLauncher == this)
         SequencerBase::Instance().stop();
     if (SequencerP::_topLauncher == this) {
-        SequencerP::_topLauncher = 0;
+        SequencerP::_topLauncher = nullptr;
     }
 }
 
@@ -315,76 +285,4 @@ size_t SequencerLauncher::numberOfSteps() const
 bool SequencerLauncher::wasCanceled() const
 {
     return SequencerBase::Instance().wasCanceled();
-}
-
-// ---------------------------------------------------------
-
-void ProgressIndicatorPy::init_type()
-{
-    behaviors().name("ProgressIndicator");
-    behaviors().doc("Progress indicator");
-    // you must have overwritten the virtual functions
-    behaviors().supportRepr();
-    behaviors().supportGetattr();
-    behaviors().supportSetattr();
-    behaviors().set_tp_new(PyMake);
-
-    add_varargs_method("start",&ProgressIndicatorPy::start,"start(string,int)");
-    add_varargs_method("next",&ProgressIndicatorPy::next,"next()");
-    add_varargs_method("stop",&ProgressIndicatorPy::stop,"stop()");
-}
-
-PyObject *ProgressIndicatorPy::PyMake(struct _typeobject *, PyObject *, PyObject *)
-{
-    return new ProgressIndicatorPy();
-}
-
-ProgressIndicatorPy::ProgressIndicatorPy()
-{
-}
-
-ProgressIndicatorPy::~ProgressIndicatorPy()
-{
-}
-
-Py::Object ProgressIndicatorPy::repr()
-{
-    std::string s = "Base.ProgressIndicator";
-    return Py::String(s);
-}
-
-Py::Object ProgressIndicatorPy::start(const Py::Tuple& args)
-{
-    char* text;
-    int steps;
-    if (!PyArg_ParseTuple(args.ptr(), "si",&text,&steps))
-        throw Py::Exception();
-    if (!_seq.get())
-        _seq.reset(new SequencerLauncher(text,steps));
-    return Py::None();
-}
-
-Py::Object ProgressIndicatorPy::next(const Py::Tuple& args)
-{
-    int b=0;
-    if (!PyArg_ParseTuple(args.ptr(), "|i",&b))
-        throw Py::Exception();
-    if (_seq.get()) {
-        try {
-            _seq->next(b ? true : false);
-        }
-        catch (const Base::AbortException&) {
-            _seq.reset();
-            throw Py::RuntimeError("abort progress indicator");
-        }
-    }
-    return Py::None();
-}
-
-Py::Object ProgressIndicatorPy::stop(const Py::Tuple& args)
-{
-    if (!PyArg_ParseTuple(args.ptr(), ""))
-        throw Py::Exception();
-    _seq.reset();
-    return Py::None();
 }

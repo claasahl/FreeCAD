@@ -27,7 +27,7 @@ import FreeCADGui
 
 __title__ = "FreeCAD Draft Workbench - Init file"
 __author__ = "Yorik van Havre <yorik@uncreated.net>"
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 
 class DraftWorkbench(FreeCADGui.Workbench):
@@ -81,7 +81,6 @@ class DraftWorkbench(FreeCADGui.Workbench):
             import Draft_rc
             import DraftTools
             import DraftGui
-            import DraftFillet
             FreeCADGui.addLanguagePath(":/translations")
             FreeCADGui.addIconPath(":/icons")
         except Exception as exc:
@@ -101,41 +100,46 @@ class DraftWorkbench(FreeCADGui.Workbench):
 
         # Set up toolbars
         it.init_toolbar(self,
-                        QT_TRANSLATE_NOOP("Draft", "Draft creation tools"),
+                        QT_TRANSLATE_NOOP("Workbench", "Draft creation tools"),
                         self.drawing_commands)
         it.init_toolbar(self,
-                        QT_TRANSLATE_NOOP("Draft", "Draft annotation tools"),
+                        QT_TRANSLATE_NOOP("Workbench", "Draft annotation tools"),
                         self.annotation_commands)
         it.init_toolbar(self,
-                        QT_TRANSLATE_NOOP("Draft", "Draft modification tools"),
+                        QT_TRANSLATE_NOOP("Workbench", "Draft modification tools"),
                         self.modification_commands)
         it.init_toolbar(self,
-                        QT_TRANSLATE_NOOP("Draft", "Draft utility tools"),
+                        QT_TRANSLATE_NOOP("Workbench", "Draft utility tools"),
                         self.utility_commands_toolbar)
+        it.init_toolbar(self,
+                        QT_TRANSLATE_NOOP("Workbench", "Draft snap"),
+                        it.get_draft_snap_commands())
 
         # Set up menus
         it.init_menu(self,
-                     [QT_TRANSLATE_NOOP("Draft", "&Drafting")],
+                     [QT_TRANSLATE_NOOP("Workbench", "&Drafting")],
                      self.drawing_commands)
         it.init_menu(self,
-                     [QT_TRANSLATE_NOOP("Draft", "&Annotation")],
+                     [QT_TRANSLATE_NOOP("Workbench", "&Annotation")],
                      self.annotation_commands)
         it.init_menu(self,
-                     [QT_TRANSLATE_NOOP("Draft", "&Modification")],
+                     [QT_TRANSLATE_NOOP("Workbench", "&Modification")],
                      self.modification_commands)
         it.init_menu(self,
-                     [QT_TRANSLATE_NOOP("Draft", "&Utilities")],
+                     [QT_TRANSLATE_NOOP("Workbench", "&Utilities")],
                      self.utility_commands_menu)
 
         # Set up preferences pages
         if hasattr(FreeCADGui, "draftToolBar"):
             if not hasattr(FreeCADGui.draftToolBar, "loadedPreferences"):
-                FreeCADGui.addPreferencePage(":/ui/preferences-draft.ui", QT_TRANSLATE_NOOP("Draft", "Draft"))
-                FreeCADGui.addPreferencePage(":/ui/preferences-draftinterface.ui", QT_TRANSLATE_NOOP("Draft", "Draft"))
-                FreeCADGui.addPreferencePage(":/ui/preferences-draftsnap.ui", QT_TRANSLATE_NOOP("Draft", "Draft"))
-                FreeCADGui.addPreferencePage(":/ui/preferences-draftvisual.ui", QT_TRANSLATE_NOOP("Draft", "Draft"))
-                FreeCADGui.addPreferencePage(":/ui/preferences-drafttexts.ui", QT_TRANSLATE_NOOP("Draft", "Draft"))
+                FreeCADGui.addPreferencePage(":/ui/preferences-draft.ui", QT_TRANSLATE_NOOP("QObject", "Draft"))
+                FreeCADGui.addPreferencePage(":/ui/preferences-draftinterface.ui", QT_TRANSLATE_NOOP("QObject", "Draft"))
+                FreeCADGui.addPreferencePage(":/ui/preferences-draftsnap.ui", QT_TRANSLATE_NOOP("QObject", "Draft"))
+                FreeCADGui.addPreferencePage(":/ui/preferences-draftvisual.ui", QT_TRANSLATE_NOOP("QObject", "Draft"))
+                FreeCADGui.addPreferencePage(":/ui/preferences-drafttexts.ui", QT_TRANSLATE_NOOP("QObject", "Draft"))
                 FreeCADGui.draftToolBar.loadedPreferences = True
+
+        FreeCADGui.getMainWindow().mainWindowClosed.connect(self.Deactivated)
 
         FreeCAD.Console.PrintLog('Loading Draft workbench, done.\n')
 
@@ -174,9 +178,9 @@ FreeCADGui.addWorkbench(DraftWorkbench)
 # are independent of the loading of the workbench and can be loaded at startup
 import Draft_rc
 from PySide.QtCore import QT_TRANSLATE_NOOP
-FreeCADGui.addPreferencePage(":/ui/preferences-dxf.ui", QT_TRANSLATE_NOOP("Draft", "Import-Export"))
-FreeCADGui.addPreferencePage(":/ui/preferences-dwg.ui", QT_TRANSLATE_NOOP("Draft", "Import-Export"))
-FreeCADGui.addPreferencePage(":/ui/preferences-svg.ui", QT_TRANSLATE_NOOP("Draft", "Import-Export"))
-FreeCADGui.addPreferencePage(":/ui/preferences-oca.ui", QT_TRANSLATE_NOOP("Draft", "Import-Export"))
+FreeCADGui.addPreferencePage(":/ui/preferences-dxf.ui", QT_TRANSLATE_NOOP("QObject", "Import-Export"))
+FreeCADGui.addPreferencePage(":/ui/preferences-dwg.ui", QT_TRANSLATE_NOOP("QObject", "Import-Export"))
+FreeCADGui.addPreferencePage(":/ui/preferences-svg.ui", QT_TRANSLATE_NOOP("QObject", "Import-Export"))
+FreeCADGui.addPreferencePage(":/ui/preferences-oca.ui", QT_TRANSLATE_NOOP("QObject", "Import-Export"))
 
 FreeCAD.__unit_test__ += ["TestDraftGui"]

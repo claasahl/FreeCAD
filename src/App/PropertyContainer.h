@@ -25,11 +25,20 @@
 #define APP_PROPERTYCONTAINER_H
 
 #include <map>
-#include <climits>
 #include <cstring>
 #include <Base/Persistence.h>
 
 #include "DynamicProperty.h"
+
+#include <xercesc/util/XercesDefs.hpp>
+
+XERCES_CPP_NAMESPACE_BEGIN
+	class DOMNode;
+	class DOMElement;
+//    class DefaultHandler;
+//    class SAX2XMLReader;
+XERCES_CPP_NAMESPACE_END
+
 
 namespace Base {
 class Writer;
@@ -74,8 +83,8 @@ struct AppExport PropertyData
   //accepting void*
   struct OffsetBase
   {
-      OffsetBase(const App::PropertyContainer* container) : m_container(container) {}
-      OffsetBase(const App::Extension* container) : m_container(container) {}
+      OffsetBase(const App::PropertyContainer* container) : m_container(container) {}//explicit bombs
+      OffsetBase(const App::Extension* container) : m_container(container) {}//explicit bombs
 
       short int getOffsetTo(const App::Property* prop) const {
             auto *pt = (const char*)prop;
@@ -83,7 +92,7 @@ struct AppExport PropertyData
             if(pt<base || pt>base+SHRT_MAX)
                 return -1;
             return (short) (pt-base);
-      };
+      }
       char* getOffset() const {return (char*) m_container;}
 
   private:
@@ -114,7 +123,7 @@ struct AppExport PropertyData
 
   const PropertyData*     parentPropertyData;
 
-  void addProperty(OffsetBase offsetBase,const char* PropName, Property *Prop, const char* PropertyGroup= 0, PropertyType = Prop_None, const char* PropertyDocu= 0 );
+  void addProperty(OffsetBase offsetBase,const char* PropName, Property *Prop, const char* PropertyGroup= nullptr, PropertyType = Prop_None, const char* PropertyDocu= nullptr );
 
   const PropertySpec *findProperty(OffsetBase offsetBase,const char* PropName) const;
   const PropertySpec *findProperty(OffsetBase offsetBase,const Property* prop) const;
@@ -132,7 +141,7 @@ struct AppExport PropertyData
   void getPropertyList(OffsetBase offsetBase,std::vector<Property*> &List) const;
   void getPropertyNamedList(OffsetBase offsetBase, std::vector<std::pair<const char*,Property*> > &List) const;
 
-  void merge(PropertyData *other=0) const;
+  void merge(PropertyData *other=nullptr) const;
   void split(PropertyData *other);
 };
 
@@ -142,7 +151,7 @@ struct AppExport PropertyData
 class AppExport PropertyContainer: public Base::Persistence
 {
 
-  TYPESYSTEM_HEADER();
+  TYPESYSTEM_HEADER_WITH_OVERRIDE();
 
 public:
   /**
@@ -155,11 +164,11 @@ public:
    * A destructor.
    * A more elaborate description of the destructor.
    */
-  virtual ~PropertyContainer();
+  ~PropertyContainer() override;
 
-  virtual unsigned int getMemSize (void) const;
+  unsigned int getMemSize () const override;
 
-  virtual std::string getFullName() const {return std::string();}
+  virtual std::string getFullName() const {return {};}
 
   /// find a property by its name
   virtual Property *getPropertyByName(const char* name) const;
@@ -195,8 +204,8 @@ public:
   /// check if the named property is hidden
   bool isHidden(const char *name) const;
   virtual App::Property* addDynamicProperty(
-        const char* type, const char* name=0,
-        const char* group=0, const char* doc=0,
+        const char* type, const char* name=nullptr,
+        const char* group=nullptr, const char* doc=nullptr,
         short attr=0, bool ro=false, bool hidden=false);
 
   DynamicProperty::PropData getDynamicPropertyData(const Property* prop) const {
@@ -219,8 +228,12 @@ public:
 
   virtual void onPropertyStatusChanged(const Property &prop, unsigned long oldStatus);
 
-  virtual void Save (Base::Writer &writer) const;
-  virtual void Restore(Base::XMLReader &reader);
+  void Save (Base::Writer &writer) const override;
+  void Restore(Base::XMLReader &reader) override;
+  void Restore(Base::DocumentReader &reader, XERCES_CPP_NAMESPACE_QUALIFIER DOMElement *containerEl) override;
+  virtual void beforeSave() const;
+
+  virtual void editProperty(const char * /*propName*/) {}
 
   const char *getPropertyPrefix() const {
       return _propertyPrefix.c_str();
@@ -241,16 +254,19 @@ protected:
   virtual void onBeforeChange(const Property* /*prop*/){}
 
   //void hasChanged(Property* prop);
-  static const  PropertyData * getPropertyDataPtr(void);
-  virtual const PropertyData& getPropertyData(void) const;
+  static const  PropertyData * getPropertyDataPtr();
+  virtual const PropertyData& getPropertyData() const;
 
   virtual void handleChangedPropertyName(Base::XMLReader &reader, const char * TypeName, const char *PropName);
   virtual void handleChangedPropertyType(Base::XMLReader &reader, const char * TypeName, Property * prop);
+  virtual void handleChangedPropertyName(Base::DocumentReader &reader, const char * TypeName, const char *PropName);
+  virtual void handleChangedPropertyType(Base::DocumentReader &reader, const char * TypeName, Property * prop);
 
-private:
+public:
   // forbidden
-  PropertyContainer(const PropertyContainer&);
-  PropertyContainer& operator = (const PropertyContainer&);
+  PropertyContainer(const PropertyContainer&) = delete;
+  PropertyContainer& operator = (const PropertyContainer&) = delete;
+  void readProperty(Base::DocumentReader &reader,XERCES_CPP_NAMESPACE_QUALIFIER DOMElement *PropertyDOM);
 
 protected:
   DynamicProperty dynamicProps;
@@ -295,7 +311,7 @@ private: \
   TYPESYSTEM_HEADER_WITH_OVERRIDE(); \
 protected: \
   static const App::PropertyData * getPropertyDataPtr(void); \
-  virtual const App::PropertyData &getPropertyData(void) const override; \
+  const App::PropertyData &getPropertyData(void) const override; \
 private: \
   static App::PropertyData propertyData
 ///

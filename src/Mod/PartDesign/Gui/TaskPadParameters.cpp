@@ -20,22 +20,16 @@
  *                                                                         *
  ***************************************************************************/
 
-
 #include "PreCompiled.h"
-
 #ifndef _PreComp_
-# include <sstream>
-# include <QRegExp>
-# include <QTextStream>
 # include <Precision.hxx>
 #endif
 
-#include "ui_TaskPadParameters.h"
-#include "TaskPadParameters.h"
-#include <Gui/Command.h>
-#include <Gui/ViewProvider.h>
 #include <Mod/PartDesign/App/FeaturePad.h>
-#include <Mod/Sketcher/App/SketchObject.h>
+
+#include "ui_TaskPadPocketParameters.h"
+#include "TaskPadParameters.h"
+
 
 using namespace PartDesignGui;
 using namespace Gui;
@@ -49,9 +43,16 @@ TaskPadParameters::TaskPadParameters(ViewProviderPad *PadView, QWidget *parent, 
     ui->checkBoxReversed->setToolTip(tr("Reverses pad direction"));
 
     // set the history path
+    ui->lengthEdit->setEntryName(QByteArray("Length"));
     ui->lengthEdit->setParamGrpPath(QByteArray("User parameter:BaseApp/History/PadLength"));
+    ui->lengthEdit2->setEntryName(QByteArray("Length2"));
     ui->lengthEdit2->setParamGrpPath(QByteArray("User parameter:BaseApp/History/PadLength2"));
+    ui->offsetEdit->setEntryName(QByteArray("Offset"));
     ui->offsetEdit->setParamGrpPath(QByteArray("User parameter:BaseApp/History/PadOffset"));
+    ui->taperEdit->setEntryName(QByteArray("TaperAngle"));
+    ui->taperEdit->setParamGrpPath(QByteArray("User parameter:BaseApp/History/PadTaperAngle"));
+    ui->taperEdit2->setEntryName(QByteArray("TaperAngle2"));
+    ui->taperEdit2->setParamGrpPath(QByteArray("User parameter:BaseApp/History/PadTaperAngle2"));
 
     setupDialog();
 
@@ -61,9 +62,7 @@ TaskPadParameters::TaskPadParameters(ViewProviderPad *PadView, QWidget *parent, 
     }
 }
 
-TaskPadParameters::~TaskPadParameters()
-{
-}
+TaskPadParameters::~TaskPadParameters() = default;
 
 void TaskPadParameters::translateModeList(int index)
 {
@@ -80,81 +79,8 @@ void TaskPadParameters::updateUI(int index)
 {
     // update direction combobox
     fillDirectionCombo();
-    
-    // disable/hide everything unless we are sure we don't need it
-    // exception: the direction parameters are in any case visible
-    bool isLengthEditVisible  = false;
-    bool isLengthEdit2Visible = false;
-    bool isOffsetEditVisible  = false;
-    bool isMidplaneEnabled    = false;
-    bool isMidplaneVisible    = false;
-    bool isReversedEnabled    = false;
-    bool isReversedVisible    = false;
-    bool isFaceEditEnabled    = false;
-
-    Modes mode = static_cast<Modes>(index);
-
-    if (mode == Modes::Dimension) {
-        isLengthEditVisible = true;
-        ui->lengthEdit->selectNumber();
-        // Make sure that the spin box has the focus to get key events
-        // Calling setFocus() directly doesn't work because the spin box is not
-        // yet visible.
-        QMetaObject::invokeMethod(ui->lengthEdit, "setFocus", Qt::QueuedConnection);
-        isMidplaneEnabled = !ui->checkBoxReversed->isChecked();
-        isMidplaneVisible = true;
-        // Reverse only makes sense if Midplane is not true
-        isReversedEnabled = !ui->checkBoxMidplane->isChecked();
-        isReversedVisible = true;
-    }
-    else if (mode == Modes::ToLast || mode == Modes::ToFirst) {
-        isOffsetEditVisible = true;
-        isReversedEnabled = true;
-        isReversedVisible = true;
-    }
-    else if (mode == Modes::ToFace) {
-        isOffsetEditVisible = true;
-        isFaceEditEnabled   = true;
-        QMetaObject::invokeMethod(ui->lineFaceName, "setFocus", Qt::QueuedConnection);
-        // Go into reference selection mode if no face has been selected yet
-        if (ui->lineFaceName->property("FeatureName").isNull())
-            onButtonFace(true);
-        isReversedEnabled = true;
-        isReversedVisible = true;
-    }
-    else if (mode == Modes::TwoDimensions) {
-        isLengthEditVisible  = true;
-        isLengthEdit2Visible = true;
-        isMidplaneEnabled    = !ui->checkBoxReversed->isChecked();
-        isMidplaneVisible    = true;
-        isReversedEnabled    = !ui->checkBoxMidplane->isChecked();
-        isReversedVisible    = true;
-    }
-
-    ui->lengthEdit->setVisible( isLengthEditVisible );
-    ui->lengthEdit->setEnabled( isLengthEditVisible );
-    ui->labelLength->setVisible( isLengthEditVisible );
-    ui->checkBoxAlongDirection->setVisible( isLengthEditVisible );
-
-    ui->offsetEdit->setVisible( isOffsetEditVisible );
-    ui->offsetEdit->setEnabled( isOffsetEditVisible );
-    ui->labelOffset->setVisible( isOffsetEditVisible );
-
-    ui->checkBoxMidplane->setEnabled( isMidplaneEnabled );
-    ui->checkBoxMidplane->setVisible( isMidplaneVisible );
-
-    ui->checkBoxReversed->setEnabled( isReversedEnabled );
-    ui->checkBoxReversed->setVisible( isReversedVisible );
-
-    ui->lengthEdit2->setVisible( isLengthEdit2Visible );
-    ui->lengthEdit2->setEnabled( isLengthEdit2Visible );
-    ui->labelLength2->setVisible( isLengthEdit2Visible );
-
-    ui->buttonFace->setEnabled( isFaceEditEnabled );
-    ui->lineFaceName->setEnabled( isFaceEditEnabled );
-    if (!isFaceEditEnabled) {
-        onButtonFace(false);
-    }
+    // set and enable checkboxes
+    setCheckboxes(static_cast<Modes>(index), Type::Pad);
 }
 
 void TaskPadParameters::onModeChanged(int index)
@@ -175,7 +101,13 @@ void TaskPadParameters::onModeChanged(int index)
         pcPad->Type.setValue("UpToFirst");
         break;
     case Modes::ToFace:
+        // Note: ui->checkBoxReversed is purposely enabled because the selected face
+        // could be a circular one around the sketch
         pcPad->Type.setValue("UpToFace");
+        if (ui->lineFaceName->text().isEmpty()) {
+            ui->buttonFace->setChecked(true);
+            handleLineFaceNameClick(); // sets placeholder text
+        }
         break;
     case Modes::TwoDimensions:
         pcPad->Type.setValue("TwoLengths");
@@ -188,24 +120,11 @@ void TaskPadParameters::onModeChanged(int index)
 
 void TaskPadParameters::apply()
 {
-    auto obj = vp->getObject();
-
-    ui->lengthEdit->apply();
-    ui->lengthEdit2->apply();
-    FCMD_OBJ_CMD(obj, "UseCustomVector = " << (getCustom() ? 1 : 0));
-    FCMD_OBJ_CMD(obj, "Direction = ("
-        << getXDirection() << ", " << getYDirection() << ", " << getZDirection() << ")");
-    FCMD_OBJ_CMD(obj, "ReferenceAxis = " << getReferenceAxis());
-    FCMD_OBJ_CMD(obj, "AlongSketchNormal = " << (getAlongSketchNormal() ? 1 : 0));
-    FCMD_OBJ_CMD(obj,"Type = " << getMode());
     QString facename = QString::fromLatin1("None");
     if (static_cast<Modes>(getMode()) == Modes::ToFace) {
         facename = getFaceName();
     }
-    FCMD_OBJ_CMD(obj,"UpToFace = " << facename.toLatin1().data());
-    FCMD_OBJ_CMD(obj,"Reversed = " << (getReversed()?1:0));
-    FCMD_OBJ_CMD(obj,"Midplane = " << (getMidplane()?1:0));
-    FCMD_OBJ_CMD(obj,"Offset = " << getOffset());
+    applyParameters(facename);
 }
 
 //**************************************************************************

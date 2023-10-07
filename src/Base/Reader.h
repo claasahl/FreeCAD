@@ -23,18 +23,20 @@
 #ifndef BASE_READER_H
 #define BASE_READER_H
 
-
-#include <string>
-#include <map>
 #include <bitset>
+#include <map>
 #include <memory>
+#include <sstream>
+#include <string>
 
 #include <xercesc/framework/XMLPScanToken.hpp>
 #include <xercesc/sax2/Attributes.hpp>
 #include <xercesc/sax2/DefaultHandler.hpp>
 
+#include <boost/iostreams/concepts.hpp>
+
 #include "FileInfo.h"
-#include "Writer.h"
+
 
 namespace zipios {
 class ZipInputStream;
@@ -47,7 +49,8 @@ XERCES_CPP_NAMESPACE_END
 
 namespace Base
 {
-
+class Persistence;
+class DocumentReader;
 
 /** The XML reader class
  * This is an important helper class for the store and retrieval system
@@ -125,7 +128,14 @@ public:
     };
     /// open the file and read the first element
     XMLReader(const char* FileName, std::istream&);
-    ~XMLReader();
+    ~XMLReader() override;
+
+    /** @name boost iostream device interface */
+    //@{
+    using category = boost::iostreams::source_tag;
+    using char_type = char;
+    std::streamsize read(char_type* s, std::streamsize n);
+    //@}
 
     bool isValid() const { return _valid; }
     bool isVerbose() const { return _verbose; }
@@ -134,11 +144,11 @@ public:
     /** @name Parser handling */
     //@{
     /// get the local name of the current Element
-    const char* localName(void) const;
+    const char* localName() const;
     /// get the current element level
     int level() const;
     /// read until a start element is found (\<name\>) or start-end element (\<name/\>) (with special name if given)
-    void readElement   (const char* ElementName=0);
+    void readElement   (const char* ElementName=nullptr);
 
     /** read until an end element is found
      *
@@ -154,9 +164,23 @@ public:
      * child element may have the same name as its parent, otherwise, using \c
      * ElementName is enough.
      */
-    void readEndElement(const char* ElementName=0, int level=-1);
+    void readEndElement(const char* ElementName=nullptr, int level=-1);
     /// read until characters are found
-    void readCharacters(void);
+    void readCharacters();
+
+    /** Obtain an input stream for reading characters
+     *
+     *  @return Return a input stream for reading characters. The stream will be
+     *  auto destroyed when you call with readElement() or readEndElement(), or
+     *  you can end it explicitly with endCharStream().
+     */
+    std::istream &beginCharStream();
+    /// Manually end the current character stream
+    void endCharStream();
+    /// Obtain the current character stream
+    std::istream &charStream();
+    //@}
+
     /// read binary file
     void readBinFile(const char*);
     //@}
@@ -164,7 +188,7 @@ public:
     /** @name Attribute handling */
     //@{
     /// get the number of attributes of the current element
-    unsigned int getAttributeCount(void) const;
+    unsigned int getAttributeCount() const;
     /// check if the read element has a special attribute
     bool hasAttribute(const char* AttrName) const;
     /// return the named attribute as an interer (does type checking)
@@ -191,18 +215,18 @@ public:
     //@}
 
     /// Schema Version of the document
-    int DocumentSchema;
+    int DocumentSchema{0};
     /// Version of FreeCAD that wrote this document
     std::string ProgramVersion;
     /// Version of the file format
-    int FileVersion;
+    int FileVersion{0};
 
     /// sets simultaneously the global and local PartialRestore bits
     void setPartialRestore(bool on);
 
-    void clearPartialRestoreDocumentObject(void);
-    void clearPartialRestoreProperty(void);
-    void clearPartialRestoreObject(void);
+    void clearPartialRestoreDocumentObject();
+    void clearPartialRestoreProperty();
+    void clearPartialRestoreObject();
 
     /// return the status bits
     bool testStatus(ReaderStatus pos) const;
@@ -216,35 +240,30 @@ public:
 
 protected:
     /// read the next element
-    bool read(void);
+    bool read();
 
     // -----------------------------------------------------------------------
     //  Handlers for the SAX ContentHandler interface
     // -----------------------------------------------------------------------
     /** @name Content handler */
     //@{
-    virtual void startDocument();
-    virtual void endDocument();
-    virtual void startElement(const XMLCh* const uri, const XMLCh* const localname, const XMLCh* const qname, const XERCES_CPP_NAMESPACE_QUALIFIER Attributes& attrs);
-    virtual void endElement  (const XMLCh* const uri, const XMLCh *const localname, const XMLCh *const qname);
-#if (XERCES_VERSION_MAJOR == 2)
-    virtual void characters         (const XMLCh* const chars, const unsigned int length);
-    virtual void ignorableWhitespace(const XMLCh* const chars, const unsigned int length);
-#else
-    virtual void characters         (const XMLCh* const chars, const XMLSize_t length);
-    virtual void ignorableWhitespace(const XMLCh* const chars, const XMLSize_t length);
-#endif
+    void startDocument() override;
+    void endDocument() override;
+    void startElement(const XMLCh* const uri, const XMLCh* const localname, const XMLCh* const qname, const XERCES_CPP_NAMESPACE_QUALIFIER Attributes& attrs) override;
+    void endElement  (const XMLCh* const uri, const XMLCh *const localname, const XMLCh *const qname) override;
+    void characters         (const XMLCh* const chars, const XMLSize_t length) override;
+    void ignorableWhitespace(const XMLCh* const chars, const XMLSize_t length) override;
     //@}
 
     /** @name Lexical handler */
     //@{
-    virtual void startCDATA  ();
-    virtual void endCDATA    ();
+    void startCDATA  () override;
+    void endCDATA    () override;
     //@}
 
     /** @name Document handler */
     //@{
-    virtual void resetDocument();
+    void resetDocument() override;
     //@}
 
 
@@ -253,20 +272,21 @@ protected:
     // -----------------------------------------------------------------------
     /** @name Error handler */
     //@{
-    void warning(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc);
-    void error(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc);
-    void fatalError(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc);
-    void resetErrors();
+    void warning(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc) override;
+    void error(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc) override;
+    void fatalError(const XERCES_CPP_NAMESPACE_QUALIFIER SAXParseException& exc) override;
+    void resetErrors() override;
     //@}
 
 
-    int Level;
+    int Level{0};
     std::string LocalName;
     std::string Characters;
-    unsigned int CharacterCount;
+    unsigned int CharacterCount{0};
+    std::streamsize CharacterOffset{-1};
 
     std::map<std::string,std::string> AttrMap;
-    typedef std::map<std::string,std::string> AttrMapType;
+    using AttrMapType = std::map<std::string,std::string>;
 
     enum {
         None = 0,
@@ -278,36 +298,40 @@ protected:
         EndElement,
         StartCDATA,
         EndCDATA
-    }   ReadType;
+    }   ReadType{None};
 
 
     FileInfo _File;
     XERCES_CPP_NAMESPACE_QUALIFIER SAX2XMLReader* parser;
     XERCES_CPP_NAMESPACE_QUALIFIER XMLPScanToken token;
-    bool _valid;
-    bool _verbose;
+    bool _valid{false};
+    bool _verbose{true};
 
     std::vector<std::string> FileNames;
 
     std::bitset<32> StatusBits;
+
+    std::unique_ptr<std::istream> CharStream;
 };
 
 class BaseExport Reader : public std::istream
 {
 public:
     Reader(std::istream&, const std::string&, int version);
-    ~Reader();
     std::istream& getStream();
     std::string getFileName() const;
     int getFileVersion() const;
     void initLocalReader(std::shared_ptr<Base::XMLReader>);
+    void initLocalDocReader(std::shared_ptr<Base::DocumentReader>);
     std::shared_ptr<Base::XMLReader> getLocalReader() const;
+    std::shared_ptr<Base::DocumentReader> getLocalDocReader() const;
 
 private:
     std::istream& _str;
     std::string _name;
     int fileVersion;
     std::shared_ptr<Base::XMLReader> localreader;
+    std::shared_ptr<Base::DocumentReader> localdocreader;
 };
 
 }

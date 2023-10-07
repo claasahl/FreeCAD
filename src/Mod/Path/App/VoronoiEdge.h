@@ -19,14 +19,13 @@
  *   Suite 330, Boston, MA  02111-1307, USA                                *
  *                                                                         *
  ***************************************************************************/
+
 #ifndef PATH_VORONOIEDGE_H
 #define PATH_VORONOIEDGE_H
 
-#include <Base/Handle.h>
 #include <Base/BaseClass.h>
-#include <Base/Vector3D.h>
-#include <Base/VectorPy.h>
 #include "Voronoi.h"
+
 
 namespace Path
 {
@@ -36,14 +35,14 @@ class Voronoi;
 class PathExport VoronoiEdge
   : public Base::BaseClass
 {
-  TYPESYSTEM_HEADER();
+  TYPESYSTEM_HEADER_WITH_OVERRIDE();
 public:
 
-  VoronoiEdge(Voronoi::diagram_type *dia = 0, long index = Voronoi::InvalidIndex);
+  VoronoiEdge(Voronoi::diagram_type *dia = nullptr, long index = Voronoi::InvalidIndex);
   VoronoiEdge(Voronoi::diagram_type *dia, const Voronoi::diagram_type::edge_type *edge);
-  ~VoronoiEdge();
+  ~VoronoiEdge() override;
 
-  bool isBound(void) const;
+  bool isBound() const;
 
   Base::Reference<Voronoi::diagram_type> dia;
   long index;

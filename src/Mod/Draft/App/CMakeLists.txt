@@ -1,7 +1,5 @@
 if(MSVC)
-    add_definitions(-DHAVE_ACOSH -DHAVE_ASINH -DHAVE_ATANH -D_CRT_SECURE_NO_WARNINGS)
-else(MSVC)
-    add_definitions(-DHAVE_LIMITS_H -DHAVE_CONFIG_H)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif(MSVC)
 
 
@@ -29,10 +27,6 @@ SET(DraftUtils_SRCS
     AppDraftUtilsPy.cpp
     PreCompiled.cpp
     PreCompiled.h
-    dxf.cpp
-    dxf.h
-    DraftDxf.cpp
-    DraftDxf.h
 )
 
 add_library(DraftUtils SHARED ${DraftUtils_SRCS})

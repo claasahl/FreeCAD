@@ -47,7 +47,7 @@ True if Draft_rc.__name__ else False
 __title__ = "FreeCAD Draft Workbench GUI Tools - Working plane-related tools"
 __author__ = ("Yorik van Havre, Werner Mayer, Martin Burbaum, Ken Cline, "
               "Dmitry Chigrin")
-__url__ = "https://www.freecadweb.org"
+__url__ = "https://www.freecad.org"
 
 
 class Draft_SelectPlane:
@@ -62,7 +62,7 @@ class Draft_SelectPlane:
         """Set icon, menu and tooltip."""
         d = {'Pixmap': 'Draft_SelectPlane',
              'Accel': "W, P",
-             'MenuText': QT_TRANSLATE_NOOP("Draft_SelectPlane", "SelectPlane"),
+             'MenuText': QT_TRANSLATE_NOOP("Draft_SelectPlane", "Select Plane"),
              'ToolTip': QT_TRANSLATE_NOOP("Draft_SelectPlane", "Select the face of solid body to create a working plane on which to sketch Draft objects.\nYou may also select a three vertices or a Working Plane Proxy.")}
         return d
 
@@ -96,7 +96,10 @@ class Draft_SelectPlane:
 
         # Fill values
         self.taskd.form.checkCenter.setChecked(self.param.GetBool("CenterPlaneOnView", False))
-        q = FreeCAD.Units.Quantity(self.param.GetFloat("gridSpacing", 1.0), FreeCAD.Units.Length)
+        try:
+            q = FreeCAD.Units.Quantity(self.param.GetString("gridSpacing", "1 mm"))
+        except ValueError:
+            q = FreeCAD.Units.Quantity("1 mm")
         self.taskd.form.fieldGridSpacing.setText(q.UserString)
         self.taskd.form.fieldGridMainLine.setValue(self.param.GetInt("gridEvery", 10))
         self.taskd.form.fieldGridExtension.setValue(self.param.GetInt("gridSize", 100))
@@ -147,7 +150,7 @@ class Draft_SelectPlane:
                 "Pick a face, 3 vertices or a WP Proxy to define the drawing plane"))
         self.call = self.view.addEventCallback("SoEvent", self.action)
 
-    def finish(self, close=False):
+    def finish(self):
         """Execute when the command is terminated."""
         # Store values
         self.param.SetBool("CenterPlaneOnView",
@@ -192,7 +195,7 @@ class Draft_SelectPlane:
         sel = FreeCADGui.Selection.getSelectionEx()
         if len(sel) == 1:
             sel = sel[0]
-            if hasattr(sel.Object, 'TypeId') and sel.Object.TypeId == 'App::Part':
+            if hasattr(sel.Object, 'TypeId') and (sel.Object.TypeId == 'App::Part' or sel.Object.TypeId == 'PartDesign::Plane'):
                 self.setPlaneFromObjPlacement(sel.Object)
                 return True
             elif Draft.getType(sel.Object) == "Axis":
@@ -477,7 +480,7 @@ class Draft_SelectPlane:
         except Exception:
             pass
         else:
-            self.param.SetFloat("gridSpacing", q.Value)
+            self.param.SetString("gridSpacing", q.UserString)
             if hasattr(FreeCADGui, "Snapper"):
                 FreeCADGui.Snapper.setGrid()
 
@@ -515,9 +518,9 @@ class Draft_SelectPlane:
         vdir = '('
         vdir += str(_vdir.x)[:4] + ','
         vdir += str(_vdir.y)[:4] + ','
-        vdir += str(_vdir.z)[:4]
-        vdir += ')'
-        vdir = " " + translate("draft", "Dir") + ": " + vdir
+        vdir += str(_vdir.z)[:4] + ')' + ' '
+        vdir += translate("draft", "Dir", "Dir here means Direction, not Directory. Also shorten the translation because of available space in GUI")
+        vdir = ': ' + vdir
         if type(arg).__name__ == 'str':
             self.wpButton.setText(arg + suffix)
             if o != 0:

@@ -1,70 +1,62 @@
-/***************************************************************************
- *   Copyright (c) 2002 Jürgen Riegel <juergen.riegel@web.de>              *
- *                                                                         *
- *   This file is part of the FreeCAD CAx development system.              *
- *                                                                         *
- *   This library is free software; you can redistribute it and/or         *
- *   modify it under the terms of the GNU Library General Public           *
- *   License as published by the Free Software Foundation; either          *
- *   version 2 of the License, or (at your option) any later version.      *
- *                                                                         *
- *   This library  is distributed in the hope that it will be useful,      *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU Library General Public License for more details.                  *
- *                                                                         *
- *   You should have received a copy of the GNU Library General Public     *
- *   License along with this library; see the file COPYING.LIB. If not,    *
- *   write to the Free Software Foundation, Inc., 59 Temple Place,         *
- *   Suite 330, Boston, MA  02111-1307, USA                                *
- *                                                                         *
- ***************************************************************************/
+ // SPDX-License-Identifier: LGPL-2.1-or-later
 
+  /****************************************************************************
+   *   Copyright (c) 2002 Jürgen Riegel <juergen.riegel@web.de>               *
+   *   Copyright (c) 2023 FreeCAD Project Association                         *
+   *                                                                          *
+   *   This file is part of FreeCAD.                                          *
+   *                                                                          *
+   *   FreeCAD is free software: you can redistribute it and/or modify it     *
+   *   under the terms of the GNU Lesser General Public License as            *
+   *   published by the Free Software Foundation, either version 2.1 of the   *
+   *   License, or (at your option) any later version.                        *
+   *                                                                          *
+   *   FreeCAD is distributed in the hope that it will be useful, but         *
+   *   WITHOUT ANY WARRANTY; without even the implied warranty of             *
+   *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU       *
+   *   Lesser General Public License for more details.                        *
+   *                                                                          *
+   *   You should have received a copy of the GNU Lesser General Public       *
+   *   License along with FreeCAD. If not, see                                *
+   *   <https://www.gnu.org/licenses/>.                                       *
+   *                                                                          *
+   ***************************************************************************/
 
 #include "PreCompiled.h"
 #ifndef _PreComp_
 # include <QApplication>
 # include <QMessageBox>
-# include <QSharedPointer>
+# include <QRegularExpression>
+# include <QRegularExpressionMatch>
 # include <QWhatsThis>
-# include <QDesktopServices>
-# include <QUrl>
-# include <boost_bind_bind.hpp>
 #endif
 
-#include <boost/scoped_ptr.hpp>
-
+#include <App/Document.h>
 #include <Base/Exception.h>
-#include <Base/FileInfo.h>
 #include <Base/Interpreter.h>
 #include <Base/Sequencer.h>
-#include <App/Document.h>
-#include "Action.h"
-#include "Application.h"
-#include "Document.h"
-#include "Splashscreen.h"
-#include "Command.h"
-#include "MainWindow.h"
-#include "WhatsThis.h"
-#include "DlgUndoRedo.h"
-#include "BitmapFactory.h"
-#include "View.h"
 
+#include "Action.h"
+#include "BitmapFactory.h"
+#include "Command.h"
+#include "DlgCustomizeImp.h"
 #include "DlgParameterImp.h"
 #include "DlgPreferencesImp.h"
-#include "DlgCustomizeImp.h"
-#include "Widgets.h"
-#include "OnlineDocumentation.h"
-#include "GuiConsole.h"
-#include "WorkbenchManager.h"
-#include "Workbench.h"
-#include "Selection.h"
 #include "DlgUnitsCalculatorImp.h"
+#include "GuiConsole.h"
+#include "MainWindow.h"
+#include "OnlineDocumentation.h"
+#include "Selection.h"
+#include "Splashscreen.h"
+#include "WhatsThis.h"
+#include "Workbench.h"
+#include "WorkbenchManager.h"
+
 
 using Base::Console;
 using Base::Sequencer;
 using namespace Gui;
-namespace bp = boost::placeholders;
+namespace sp = std::placeholders;
 
 
 //===========================================================================
@@ -101,11 +93,11 @@ void StdCmdWorkbench::activated(int i)
     catch(const Base::PyException& e) {
         QString msg(QLatin1String(e.what()));
         // ignore '<type 'exceptions.*Error'>' prefixes
-        QRegExp rx;
-        rx.setPattern(QLatin1String("^\\s*<type 'exceptions.\\w*'>:\\s*"));
-        int pos = rx.indexIn(msg);
-        if (pos != -1)
-            msg = msg.mid(rx.matchedLength());
+        QRegularExpression rx;
+        rx.setPattern(QLatin1String(R"(^\s*<type 'exceptions.\w*'>:\s*)"));
+        auto match = rx.match(msg);
+        if (match.hasMatch())
+            msg = msg.mid(match.capturedLength());
         QMessageBox::critical(getMainWindow(), QObject::tr("Cannot load workbench"), msg);
     }
     catch(...) {
@@ -114,12 +106,12 @@ void StdCmdWorkbench::activated(int i)
     }
 }
 
-bool StdCmdWorkbench::isActive(void)
+bool StdCmdWorkbench::isActive()
 {
     return true;
 }
 
-Action * StdCmdWorkbench::createAction(void)
+Action * StdCmdWorkbench::createAction()
 {
     Action *pcAction;
 
@@ -142,7 +134,7 @@ StdCmdRecentFiles::StdCmdRecentFiles()
   :Command("Std_RecentFiles")
 {
     sGroup        = "File";
-    sMenuText     = QT_TR_NOOP("Recent files");
+    sMenuText     = QT_TR_NOOP("Open Recent");
     sToolTipText  = QT_TR_NOOP("Recent file list");
     sWhatsThis    = "Std_RecentFiles";
     sStatusTip    = QT_TR_NOOP("Recent file list");
@@ -157,16 +149,16 @@ StdCmdRecentFiles::StdCmdRecentFiles()
  */
 void StdCmdRecentFiles::activated(int iMsg)
 {
-    RecentFilesAction* act = qobject_cast<RecentFilesAction*>(_pcAction);
+    auto act = qobject_cast<RecentFilesAction*>(_pcAction);
     if (act) act->activateFile( iMsg );
 }
 
 /**
  * Creates the QAction object containing the recent files.
  */
-Action * StdCmdRecentFiles::createAction(void)
+Action * StdCmdRecentFiles::createAction()
 {
-    RecentFilesAction* pcAction = new RecentFilesAction(this, getMainWindow());
+    auto pcAction = new RecentFilesAction(this, getMainWindow());
     pcAction->setObjectName(QLatin1String("recentFiles"));
     pcAction->setDropDownMenu(true);
     applyCommandData(this->className(), pcAction);
@@ -187,6 +179,7 @@ StdCmdRecentMacros::StdCmdRecentMacros()
     sToolTipText  = QT_TR_NOOP("Recent macro list");
     sWhatsThis    = "Std_RecentMacros";
     sStatusTip    = QT_TR_NOOP("Recent macro list");
+    sPixmap       = "Std_RecentMacros";
     eType         = NoTransaction;
 }
 
@@ -197,16 +190,16 @@ StdCmdRecentMacros::StdCmdRecentMacros()
  */
 void StdCmdRecentMacros::activated(int iMsg)
 {
-    RecentMacrosAction* act = qobject_cast<RecentMacrosAction*>(_pcAction);
+    auto act = qobject_cast<RecentMacrosAction*>(_pcAction);
     if (act) act->activateFile( iMsg );
 }
 
 /**
  * Creates the QAction object containing the recent macros.
  */
-Action * StdCmdRecentMacros::createAction(void)
+Action * StdCmdRecentMacros::createAction()
 {
-    RecentMacrosAction* pcAction = new RecentMacrosAction(this, getMainWindow());
+    auto pcAction = new RecentMacrosAction(this, getMainWindow());
     pcAction->setObjectName(QLatin1String("recentMacros"));
     pcAction->setDropDownMenu(true);
     applyCommandData(this->className(), pcAction);
@@ -230,12 +223,12 @@ StdCmdAbout::StdCmdAbout()
     eType         = 0;
 }
 
-Action * StdCmdAbout::createAction(void)
+Action * StdCmdAbout::createAction()
 {
     Action *pcAction;
 
     QString exe = qApp->applicationName();
-    pcAction = new Action(this,getMainWindow());
+    pcAction = new Action(this, getMainWindow());
     pcAction->setText(QCoreApplication::translate(
         this->className(), getMenuText()).arg(exe));
     pcAction->setToolTip(QCoreApplication::translate(
@@ -368,7 +361,7 @@ StdCmdDlgPreferences::StdCmdDlgPreferences()
     eType         = 0;
 }
 
-Action * StdCmdDlgPreferences::createAction(void)
+Action * StdCmdDlgPreferences::createAction()
 {
     Action *pcAction = Command::createAction();
     pcAction->setMenuRole(QAction::PreferencesRole);
@@ -379,8 +372,19 @@ Action * StdCmdDlgPreferences::createAction(void)
 void StdCmdDlgPreferences::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
+
+    static QString groupName{};
+    static int index{};
+
     Gui::Dialog::DlgPreferencesImp cDlg(getMainWindow());
-    cDlg.exec();
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences");
+    if (hGrp->GetBool("RestoreGroupPage", true)) {
+        cDlg.activateGroupPage(groupName, index);
+    }
+
+    if (cDlg.exec()) {
+        cDlg.activeGroupPage(groupName, index);
+    }
 }
 
 //===========================================================================
@@ -403,7 +407,7 @@ StdCmdDlgCustomize::StdCmdDlgCustomize()
 void StdCmdDlgCustomize::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
-    static QPointer<QDialog> dlg = 0;
+    static QPointer<QDialog> dlg = nullptr;
     if (!dlg)
         dlg = new Gui::Dialog::DlgCustomizeImp(getMainWindow());
     dlg->setAttribute(Qt::WA_DeleteOnClose);
@@ -700,6 +704,35 @@ void StdCmdPythonWebsite::activated(int iMsg)
     OpenURLInBrowser("https://www.python.org");
 }
 
+
+//===========================================================================
+// Std_ReportBug
+//===========================================================================
+
+DEF_STD_CMD(StdCmdReportBug)
+
+StdCmdReportBug::StdCmdReportBug()
+  :Command("Std_ReportBug")
+{
+    sGroup        = "Help";
+    sMenuText     = QT_TR_NOOP("Report a bug");
+    sToolTipText  = QT_TR_NOOP("Report a bug or suggest a feature");
+    sWhatsThis    = "Std_ReportBug";
+    sStatusTip    = QT_TR_NOOP("Report a bug or suggest a feature");
+    sPixmap       = "internet-web-browser";
+    eType         = 0;
+}
+
+void StdCmdReportBug::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    ParameterGrp::handle hURLGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/Websites");
+    std::string url = hURLGrp->GetASCII("IssuesPage", "https://github.com/FreeCAD/FreeCAD/issues");
+    hURLGrp->SetASCII("IssuesPage", url.c_str());
+    OpenURLInBrowser(url.c_str());
+}
+
+
 //===========================================================================
 // Std_MeasurementSimple
 //===========================================================================
@@ -786,7 +819,7 @@ void StdCmdTextDocument::activated(int iMsg)
     commitCommand();
 }
 
-bool StdCmdTextDocument::isActive(void)
+bool StdCmdTextDocument::isActive()
 {
     return hasActiveDocument();
 }
@@ -811,7 +844,7 @@ StdCmdUnitsCalculator::StdCmdUnitsCalculator()
 void StdCmdUnitsCalculator::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
-    Gui::Dialog::DlgUnitsCalculator *dlg = new Gui::Dialog::DlgUnitsCalculator( getMainWindow() );
+    auto dlg = new Gui::Dialog::DlgUnitsCalculator( getMainWindow() );
     dlg->show();
 }
 
@@ -822,14 +855,14 @@ class StdCmdUserEditMode : public Gui::Command
 {
 public:
     StdCmdUserEditMode();
-    virtual ~StdCmdUserEditMode(){}
-    virtual void languageChange();
-    virtual const char* className() const {return "StdCmdUserEditMode";}
+    ~StdCmdUserEditMode() override = default;
+    void languageChange() override;
+    const char* className() const override {return "StdCmdUserEditMode";}
     void updateIcon(int mode);
 protected:
-    virtual void activated(int iMsg);
-    virtual bool isActive(void);
-    virtual Gui::Action * createAction(void);
+    void activated(int iMsg) override;
+    bool isActive() override;
+    Gui::Action * createAction() override;
 };
 
 StdCmdUserEditMode::StdCmdUserEditMode()
@@ -843,23 +876,26 @@ StdCmdUserEditMode::StdCmdUserEditMode()
     sPixmap       = "Std_UserEditModeDefault";
     eType         = ForEdit;
 
-    this->getGuiApplication()->signalUserEditModeChanged.connect(boost::bind(&StdCmdUserEditMode::updateIcon, this, bp::_1));
+    this->getGuiApplication()->signalUserEditModeChanged.connect([this](int mode) {
+        this->updateIcon(mode);
+    });
 }
 
-Gui::Action * StdCmdUserEditMode::createAction(void)
+Gui::Action * StdCmdUserEditMode::createAction()
 {
-    Gui::ActionGroup* pcAction = new Gui::ActionGroup(this, Gui::getMainWindow());
+    auto pcAction = new Gui::ActionGroup(this, Gui::getMainWindow());
     pcAction->setDropDownMenu(true);
     pcAction->setIsMode(true);
     applyCommandData(this->className(), pcAction);
 
     for (auto const &uem : Gui::Application::Instance->listUserEditModes()) {
         QAction* act = pcAction->addAction(QString());
-        auto modeName = QString::fromStdString(uem.second);
+        auto modeName = QString::fromStdString(uem.second.first);
         act->setCheckable(true);
         act->setIcon(BitmapFactory().iconFromTheme(qPrintable(QString::fromLatin1("Std_UserEditMode")+modeName)));
         act->setObjectName(QString::fromLatin1("Std_UserEditMode")+modeName);
         act->setWhatsThis(QString::fromLatin1(getWhatsThis()));
+        act->setToolTip(QString::fromStdString(uem.second.second));
 
         if (uem.first == 0) {
             pcAction->setIcon(act->icon());
@@ -883,21 +919,21 @@ void StdCmdUserEditMode::languageChange()
 
     if (!_pcAction)
         return;
-    Gui::ActionGroup* pcAction = qobject_cast<Gui::ActionGroup*>(_pcAction);
+    auto pcAction = qobject_cast<Gui::ActionGroup*>(_pcAction);
     QList<QAction*> a = pcAction->actions();
 
     for (int i = 0 ; i < a.count() ; i++) {
-        auto modeName = QString::fromStdString(Gui::Application::Instance->getUserEditModeName(i));
+        auto modeName = Gui::Application::Instance->getUserEditModeUIStrings(i);
         a[i]->setText(QCoreApplication::translate(
-        "EditMode", qPrintable(modeName)));
+        "EditMode", modeName.first.c_str()));
         a[i]->setToolTip(QCoreApplication::translate(
-        "EditMode", qPrintable(modeName+QString::fromLatin1(" mode"))));
+        "EditMode", modeName.second.c_str()));
     }
 }
 
 void StdCmdUserEditMode::updateIcon(int mode)
 {
-    Gui::ActionGroup *actionGroup = dynamic_cast<Gui::ActionGroup *>(_pcAction);
+    auto actionGroup = dynamic_cast<Gui::ActionGroup *>(_pcAction);
     if (!actionGroup)
         return;
 
@@ -911,14 +947,14 @@ void StdCmdUserEditMode::activated(int iMsg)
     Gui::Application::Instance->setUserEditMode(iMsg);
 }
 
-bool StdCmdUserEditMode::isActive(void)
+bool StdCmdUserEditMode::isActive()
 {
     return true;
 }
 
 namespace Gui {
 
-void CreateStdCommands(void)
+void CreateStdCommands()
 {
     CommandManager &rcCmdMgr = Application::Instance->commandManager();
 
@@ -943,6 +979,7 @@ void CreateStdCommands(void)
     rcCmdMgr.addCommand(new StdCmdFreeCADForum());
     rcCmdMgr.addCommand(new StdCmdFreeCADFAQ());
     rcCmdMgr.addCommand(new StdCmdPythonWebsite());
+    rcCmdMgr.addCommand(new StdCmdReportBug());
     rcCmdMgr.addCommand(new StdCmdTextDocument());
     rcCmdMgr.addCommand(new StdCmdUnitsCalculator());
     rcCmdMgr.addCommand(new StdCmdUserEditMode());
